@@ -5,7 +5,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
 
   SUPABASE_URL: z.string().url(),
-  SUPABASE_ANON_KEY: z.string().min(1),
+  SUPABASE_PUBLISH_KEY: z.string().min(1),
+  
 
   MONGODB_URI: z.string().optional(),
 

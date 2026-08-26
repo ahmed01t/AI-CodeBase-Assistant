@@ -2,9 +2,6 @@
 -- Migration 003: GitHub & Knowledge
 -- =========================================================
 
--- =========================================================
--- Migration 003: GitHub & Knowledge
--- =========================================================
 
 create extension if not exists vector
 with schema extensions;
@@ -281,3 +278,8 @@ create index embeddings_chunk_id_idx
 -- =========================================================
 -- 8. VECTOR INDEX
 -- =========================================================
+
+create index embeddings_embedding_hnsw_idx
+    on public.embeddings
+    using hnsw (embedding extensions.vector_cosine_ops);
+

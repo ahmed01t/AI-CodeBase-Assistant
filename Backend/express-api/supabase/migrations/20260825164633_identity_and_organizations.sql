@@ -69,3 +69,11 @@ create table public.organization_members (
     constraint organization_members_role_check
         check (role in ('owner', 'admin', 'member', 'viewer'))
 );
+
+
+-- =========================================================
+-- 4. INDEXES
+-- =========================================================
+
+create index organization_members_user_id_idx
+    on public.organization_members(user_id);
