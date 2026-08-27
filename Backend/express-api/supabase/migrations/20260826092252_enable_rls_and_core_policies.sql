@@ -331,9 +331,9 @@ using (
 );
 
 
--- =========================================================
+-- ============================================
 -- 8. REPOSITORY POLICIES
--- =========================================================
+-- ============================================
 
 -- Members can read repositories belonging to projects
 -- in their organization.
@@ -569,4 +569,4 @@ create policy "admins_can_read_audit_logs"
 on public.audit_logs for select to authenticated
 using (
     public.is_org_admin(organization_id)
-);
+);
