@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase.js";
 
 export interface AuthenticatedRequest extends Request {
   userId: string;
+  token: string;
 }
 
 export async function requireAuth(
@@ -35,6 +36,7 @@ export async function requireAuth(
     }
 
     (req as AuthenticatedRequest).userId = user.id;
+    (req as AuthenticatedRequest).token = token;
 
     next();
   } catch (error) {
