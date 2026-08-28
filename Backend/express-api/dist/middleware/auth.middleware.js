@@ -1,20 +1,15 @@
 import { supabase } from "../lib/supabase.js";
-export async function requireAuth(req, res, next) {
+import { ApiError } from "../utils/ApiError.js";
+export async function requireAuth(req, _res, next) {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader?.startsWith("Bearer ")) {
-            return res.status(401).json({
-                success: false,
-                message: "Authentication required",
-            });
+            throw new ApiError(401, "Authentication required");
         }
         const token = authHeader.substring("Bearer ".length);
         const { data: { user }, error, } = await supabase.auth.getUser(token);
         if (error || !user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired authentication token",
-            });
+            throw new ApiError(401, "Invalid or expired authentication token");
         }
         req.userId = user.id;
         req.token = token;

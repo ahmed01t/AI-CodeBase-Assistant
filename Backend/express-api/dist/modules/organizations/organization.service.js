@@ -1,19 +1,9 @@
 import { organizationRepository } from "./organization.repository.js";
-/**
- * Custom application error class to pass HTTP status code and message
- */
-export class AppError extends Error {
-    statusCode;
-    constructor(statusCode, message) {
-        super(message);
-        this.statusCode = statusCode;
-        this.name = "AppError";
-    }
-}
+import { ApiError } from "../../utils/ApiError.js";
 /**
  * Organization Service
  * Contains business logic for organization operations.
- * Delegated database queries to the repository layer.
+ * Delegates database queries to the repository layer.
  */
 export class OrganizationService {
     repository;
@@ -45,9 +35,8 @@ export class OrganizationService {
             });
         }
         catch (error) {
-            // Handle PostgreSQL unique constraint violation (code 23505)
             if (error?.code === "23505") {
-                throw new AppError(409, `Organization with slug '${slug}' already exists`);
+                throw new ApiError(409, `Organization with slug '${slug}' already exists`);
             }
             throw error;
         }
@@ -60,12 +49,12 @@ export class OrganizationService {
     }
     /**
      * Retrieves a single organization by ID.
-     * Business Logic: Throws 404 error if organization is not found or not accessible.
+     * Business Logic: Throws 404 ApiError if organization is not found or not accessible.
      */
     async getOrganizationById(token, id) {
         const organization = await this.repository.findById(token, id);
         if (!organization) {
-            throw new AppError(404, "Organization not found or access denied");
+            throw new ApiError(404, "Organization not found or access denied");
         }
         return organization;
     }
@@ -74,23 +63,22 @@ export class OrganizationService {
      * Business Logic: Validates organization existence and updates fields.
      */
     async updateOrganization(token, id, input) {
-        // Check if organization exists first
         const existing = await this.repository.findById(token, id);
         if (!existing) {
-            throw new AppError(404, "Organization not found or access denied");
+            throw new ApiError(404, "Organization not found or access denied");
         }
         try {
             const updated = await this.repository.update(token, id, input);
             if (!updated) {
-                throw new AppError(403, "Forbidden: Only organization admins can update organization details");
+                throw new ApiError(403, "Forbidden: Only organization admins can update organization details");
             }
             return updated;
         }
         catch (error) {
-            if (error instanceof AppError)
+            if (error instanceof ApiError)
                 throw error;
             if (error?.code === "23505") {
-                throw new AppError(409, `Organization with slug '${input.slug}' already exists`);
+                throw new ApiError(409, `Organization with slug '${input.slug}' already exists`);
             }
             throw error;
         }
@@ -100,14 +88,13 @@ export class OrganizationService {
      * Business Logic: Ensures organization exists and user has owner rights.
      */
     async deleteOrganization(token, id) {
-        // Check if organization exists first
         const existing = await this.repository.findById(token, id);
         if (!existing) {
-            throw new AppError(404, "Organization not found or access denied");
+            throw new ApiError(404, "Organization not found or access denied");
         }
         const deleted = await this.repository.delete(token, id);
         if (!deleted) {
-            throw new AppError(403, "Forbidden: Only the organization owner can delete an organization");
+            throw new ApiError(403, "Forbidden: Only the organization owner can delete an organization");
         }
         return deleted;
     }

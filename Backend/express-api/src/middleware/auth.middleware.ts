@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { supabase } from "../lib/supabase.js";
+import { ApiError } from "../utils/ApiError.js";
 
 export interface AuthenticatedRequest extends Request {
   userId: string;
@@ -8,17 +9,14 @@ export interface AuthenticatedRequest extends Request {
 
 export async function requireAuth(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
+      throw new ApiError(401, "Authentication required");
     }
 
     const token = authHeader.substring("Bearer ".length);
@@ -29,10 +27,7 @@ export async function requireAuth(
     } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired authentication token",
-      });
+      throw new ApiError(401, "Invalid or expired authentication token");
     }
 
     (req as AuthenticatedRequest).userId = user.id;

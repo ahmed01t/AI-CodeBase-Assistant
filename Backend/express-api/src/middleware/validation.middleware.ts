@@ -1,9 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
 import { ZodSchema, ZodError } from "zod";
+import { ApiError } from "../utils/ApiError.js";
 
 /**
  * Middleware factory to validate incoming HTTP request body, params, or query
- * against provided Zod schemas. Returns 400 Bad Request if validation fails.
+ * against provided Zod schemas. Throws ApiError(400) if validation fails.
  */
 export function validateRequest(schemas: {
   body?: ZodSchema;
@@ -24,14 +25,11 @@ export function validateRequest(schemas: {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
-          success: false,
-          message: "Validation failed",
-          errors: error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-          })),
-        });
+        const validationErrors = error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        }));
+        return next(new ApiError(400, "Validation failed", validationErrors));
       }
       next(error);
     }

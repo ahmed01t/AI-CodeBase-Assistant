@@ -1,4 +1,5 @@
-import { organizationService, AppError } from "./organization.service.js";
+import { organizationService } from "./organization.service.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 /**
  * Organization Controller
  * Handles HTTP concerns only (extracting request parameters, invoking services, returning responses).
@@ -12,19 +13,11 @@ export async function createOrganization(req, res, next) {
         const token = req.token;
         const input = req.body;
         const organization = await organizationService.createOrganization(token, input);
-        return res.status(201).json({
-            success: true,
-            message: "Organization created successfully",
-            data: organization,
-        });
+        return res
+            .status(201)
+            .json(new ApiResponse(201, organization, "Organization created successfully"));
     }
     catch (error) {
-        if (error instanceof AppError) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message,
-            });
-        }
         next(error);
     }
 }
@@ -35,18 +28,11 @@ export async function listOrganizations(req, res, next) {
     try {
         const token = req.token;
         const organizations = await organizationService.listOrganizations(token);
-        return res.status(200).json({
-            success: true,
-            data: organizations,
-        });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, organizations, "Organizations retrieved successfully"));
     }
     catch (error) {
-        if (error instanceof AppError) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message,
-            });
-        }
         next(error);
     }
 }
@@ -58,18 +44,11 @@ export async function getOrganization(req, res, next) {
         const token = req.token;
         const id = req.params.id;
         const organization = await organizationService.getOrganizationById(token, id);
-        return res.status(200).json({
-            success: true,
-            data: organization,
-        });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, organization, "Organization retrieved successfully"));
     }
     catch (error) {
-        if (error instanceof AppError) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message,
-            });
-        }
         next(error);
     }
 }
@@ -82,19 +61,11 @@ export async function updateOrganization(req, res, next) {
         const id = req.params.id;
         const input = req.body;
         const updatedOrganization = await organizationService.updateOrganization(token, id, input);
-        return res.status(200).json({
-            success: true,
-            message: "Organization updated successfully",
-            data: updatedOrganization,
-        });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, updatedOrganization, "Organization updated successfully"));
     }
     catch (error) {
-        if (error instanceof AppError) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message,
-            });
-        }
         next(error);
     }
 }
@@ -106,19 +77,11 @@ export async function deleteOrganization(req, res, next) {
         const token = req.token;
         const id = req.params.id;
         const deletedOrganization = await organizationService.deleteOrganization(token, id);
-        return res.status(200).json({
-            success: true,
-            message: "Organization deleted successfully",
-            data: deletedOrganization,
-        });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, deletedOrganization, "Organization deleted successfully"));
     }
     catch (error) {
-        if (error instanceof AppError) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.message,
-            });
-        }
         next(error);
     }
 }
