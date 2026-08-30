@@ -9,7 +9,7 @@ export class ProjectService {
     repository;
     constructor(repository = projectRepository) {
         this.repository = repository;
-    }
+    } // when we create a project service  give it a project repository
     /**
      * Generates a URL-friendly slug from a project name
      * Example: "Mobile App Backend" -> "mobile-app-backend"

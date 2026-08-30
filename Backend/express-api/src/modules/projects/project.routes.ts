@@ -37,8 +37,7 @@ router.get(
  */
 router.get(
   "/:id",
-  validateRequest({ params: projectParamSchema }),
-  projectController.getProject
+  validateRequest({ params: projectParamSchema }),projectController.getProject
 );
 
 /**

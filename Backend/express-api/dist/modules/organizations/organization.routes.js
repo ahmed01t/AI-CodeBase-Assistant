@@ -3,9 +3,12 @@ import { requireAuth } from "../../middleware/auth.middleware.js";
 import { validateRequest } from "../../middleware/validation.middleware.js";
 import * as organizationController from "./organization.controller.js";
 import { createOrganizationSchema, updateOrganizationSchema, organizationParamSchema, } from "./organization.validation.js";
+import organizationMemberRouter from "../organization-members/organization-member.routes.js";
 const router = Router();
 // Require authentication for all organization routes
 router.use(requireAuth);
+// Sub-router for Organization Members endpoints (/api/v1/organizations/:organizationId/members)
+router.use("/:organizationId/members", organizationMemberRouter);
 /**
  * POST /api/v1/organizations - Create a new organization
  */
