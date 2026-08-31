@@ -9,10 +9,15 @@ import {
   listProjectsQuerySchema,
 } from "./project.validation.js";
 
+import repositoryRouter from "../repositories/repository.routes.js";
+
 const router = Router();
 
 // Require authentication for all project routes
 router.use(requireAuth);
+
+// Sub-router for project repositories (/api/v1/projects/:projectId/repositories)
+router.use("/:projectId/repositories", repositoryRouter);
 
 /**
  * POST /api/v1/projects - Create a new project inside an organization

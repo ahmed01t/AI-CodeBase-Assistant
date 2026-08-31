@@ -3,9 +3,12 @@ import { requireAuth } from "../../middleware/auth.middleware.js";
 import { validateRequest } from "../../middleware/validation.middleware.js";
 import * as projectController from "./project.controller.js";
 import { createProjectSchema, updateProjectSchema, projectParamSchema, listProjectsQuerySchema, } from "./project.validation.js";
+import repositoryRouter from "../repositories/repository.routes.js";
 const router = Router();
 // Require authentication for all project routes
 router.use(requireAuth);
+// Sub-router for project repositories (/api/v1/projects/:projectId/repositories)
+router.use("/:projectId/repositories", repositoryRouter);
 /**
  * POST /api/v1/projects - Create a new project inside an organization
  */
