@@ -156,3 +156,13 @@ Authorization: Bearer {{token}}
 ### 5.5 Delete Repository Record
 DELETE {{baseUrl}}/repositories/{{repoId}}
 Authorization: Bearer {{token}}
+
+
+# =========================================================
+# 6. GITHUB INTEGRATION MODULE
+# =========================================================
+
+### 6.1 Get GitHub Repository Metadata
+GET {{baseUrl}}/github/repos/facebook/react
+Authorization: Bearer {{token}}
+
