@@ -19,9 +19,10 @@ export async function createOrganization(
 ) {
   try {
     const token = req.token!;
+    const userId = req.userId!;
     const input: CreateOrganizationInput = req.body;
 
-    const organization = await organizationService.createOrganization(token, input);
+    const organization = await organizationService.createOrganization(token, input, userId);
 
     return res
       .status(201)

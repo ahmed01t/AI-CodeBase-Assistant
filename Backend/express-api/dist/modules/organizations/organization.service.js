@@ -1,4 +1,5 @@
 import { organizationRepository } from "./organization.repository.js";
+import { userRepository } from "../users/user.repository.js";
 import { ApiError } from "../../utils/ApiError.js";
 /**
  * Organization Service
@@ -24,10 +25,25 @@ export class OrganizationService {
     }
     /**
      * Creates a new organization.
-     * Business Logic: Auto-generates a slug if not provided and handles duplicate slug errors.
+     * Business Logic: Auto-generates a slug if not provided, ensures caller's profile exists,
+     * and handles duplicate slug errors.
      */
-    async createOrganization(token, input) {
+    async createOrganization(token, input, userId) {
         const slug = input.slug || this.generateSlug(input.name);
+        // If userId is provided, ensure caller's profile exists in public.profiles first.
+        // This allows the database trigger `create_organization_owner()` to insert into
+        // `organization_members` without violating the foreign key constraint to public.profiles.
+        if (userId) {
+            try {
+                const profile = await userRepository.findProfileById(token, userId);
+                if (!profile) {
+                    await userRepository.createInitialProfile(token, userId);
+                }
+            }
+            catch {
+                // Continue if profile creation was already handled by trigger
+            }
+        }
         try {
             return await this.repository.create(token, {
                 name: input.name,
@@ -37,6 +53,9 @@ export class OrganizationService {
         catch (error) {
             if (error?.code === "23505") {
                 throw new ApiError(409, `Organization with slug '${slug}' already exists`);
+            }
+            if (error?.code === "42501") {
+                throw new ApiError(403, `Forbidden: ${error.message || "Row-level security policy prevented operation"}${error.details ? ` (${error.details})` : ""}`);
             }
             throw error;
         }

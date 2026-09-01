@@ -49,7 +49,7 @@ export class RepositoryService {
             }
             // Postgres RLS failure / permission denied
             if (error?.code === "42501") {
-                throw new ApiError(403, "Forbidden: You do not have permission to add repositories to this project");
+                throw new ApiError(403, `Forbidden: ${error.message || "You do not have permission to add repositories to this project"}${error.details ? ` (${error.details})` : ""}`);
             }
             throw error;
         }

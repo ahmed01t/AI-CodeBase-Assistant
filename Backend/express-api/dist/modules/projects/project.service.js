@@ -43,7 +43,7 @@ export class ProjectService {
             }
             // Postgres RLS authorization failure / insufficient privileges
             if (error?.code === "42501") {
-                throw new ApiError(403, "Forbidden: You are not a member of this organization");
+                throw new ApiError(403, `Forbidden: ${error.message || "You are not a member of this organization"}${error.details ? ` (${error.details})` : ""}`);
             }
             throw error;
         }

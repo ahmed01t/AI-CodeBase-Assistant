@@ -11,8 +11,9 @@ import { ApiResponse } from "../../utils/ApiResponse.js";
 export async function createOrganization(req, res, next) {
     try {
         const token = req.token;
+        const userId = req.userId;
         const input = req.body;
-        const organization = await organizationService.createOrganization(token, input);
+        const organization = await organizationService.createOrganization(token, input, userId);
         return res
             .status(201)
             .json(new ApiResponse(201, organization, "Organization created successfully"));

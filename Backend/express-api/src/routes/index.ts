@@ -4,6 +4,7 @@ import organizationRouter from "../modules/organizations/organization.routes.js"
 import projectRouter from "../modules/projects/project.routes.js";
 import repositoryRouter from "../modules/repositories/repository.routes.js";
 import githubRouter from "../modules/github/github.routes.js";
+import userRouter from "../modules/users/user.routes.js";
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use("/organizations", organizationRouter);
 router.use("/projects", projectRouter);
 router.use("/repositories", repositoryRouter);
 router.use("/github", githubRouter);
+router.use("/users", userRouter);
 
 export default router;

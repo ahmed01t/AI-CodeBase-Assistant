@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { getAuthenticatedSupabaseClient } from "../../lib/supabase.js";
 import type {
   Organization,
@@ -14,23 +15,35 @@ import type {
 export class OrganizationRepository {
   /**
    * Inserts a new organization into the database.
-   * Postgres RLS allows authenticated users to insert, and a trigger
-   * automatically registers the creator as the 'owner' in organization_members.
+   * Uses a pre-generated ID so the AFTER INSERT trigger can complete and register
+   * the creator as the 'owner' in organization_members before RLS SELECT checks occur.
    */
   async create(token: string, data: { name: string; slug: string }): Promise<Organization> {
     const client = getAuthenticatedSupabaseClient(token);
+    const organizationId = crypto.randomUUID();
 
-    const { data: organization, error } = await client
+    // 1. Insert organization record without .select() so the trigger executes first
+    const { error: insertError } = await client
       .from("organizations")
       .insert({
+        id: organizationId,
         name: data.name,
         slug: data.slug,
-      })
-      .select()
+      });
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    // 2. Fetch the created organization record now that the owner trigger has completed
+    const { data: organization, error: selectError } = await client
+      .from("organizations")
+      .select("*")
+      .eq("id", organizationId)
       .single();
 
-    if (error) {
-      throw error;
+    if (selectError) {
+      throw selectError;
     }
 
     return organization as Organization;
@@ -129,4 +142,3 @@ export class OrganizationRepository {
 }
 
 export const organizationRepository = new OrganizationRepository();
-

@@ -20,7 +20,8 @@ export function validateRequest(schemas: {
         req.params = (await schemas.params.parseAsync(req.params)) as any;
       }
       if (schemas.query) {
-        req.query = (await schemas.query.parseAsync(req.query)) as any;
+        const parsedQuery = (await schemas.query.parseAsync(req.query)) as any;
+        Object.assign(req.query, parsedQuery);
       }
       next();
     } catch (error) {
