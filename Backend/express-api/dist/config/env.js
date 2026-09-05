@@ -5,6 +5,7 @@ const envSchema = z.object({
     SUPABASE_URL: z.string().url(),
     SUPABASE_PUBLISH_KEY: z.string().min(1),
     MONGODB_URI: z.string().optional(),
+    MONGODB_DB_NAME: z.string().default("codebase_assistant"),
     AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
     // GitHub Integration Configuration
     GITHUB_TOKEN: z.string().optional(),

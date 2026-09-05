@@ -35,14 +35,21 @@ export class ProjectRepository {
      */
     async findAll(token, organizationId) {
         const client = getAuthenticatedSupabaseClient(token);
-        let query = client
+        if (organizationId) {
+            const { data: projects, error } = await client
+                .from("projects")
+                .select("*")
+                .eq("organization_id", organizationId)
+                .order("created_at", { ascending: false });
+            if (error) {
+                throw error;
+            }
+            return (projects || []);
+        }
+        const { data: projects, error } = await client
             .from("projects")
             .select("*")
             .order("created_at", { ascending: false });
-        if (organizationId) {
-            query = query.eq("organization_id", organizationId);
-        }
-        const { data: projects, error } = await query;
         if (error) {
             throw error;
         }

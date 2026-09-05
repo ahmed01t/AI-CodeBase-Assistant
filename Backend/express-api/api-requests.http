@@ -213,3 +213,17 @@ Content-Type: application/json
   "display_name": "Jane Developer",
   "avatar_url": "https://example.com/avatars/jane.png"
 }
+
+
+# =========================================================
+# 8. REPOSITORY INGESTION MODULE
+# =========================================================
+
+### 8.1 Trigger Background Repository Synchronization (Non-Blocking)
+POST {{baseUrl}}/repositories/{{repoId}}/sync
+Authorization: Bearer {{token}}
+
+### 8.2 Get Ingestion Job Status & Progress
+GET {{baseUrl}}/repositories/sync/jobs/123e4567-e89b-12d3-a456-426614174000
+Authorization: Bearer {{token}}
+

@@ -45,3 +45,39 @@ export interface GetRepoMetadataInput {
   customToken?: string;
 }
 
+/**
+ * Single item in a GitHub Git Tree (file or directory)
+ */
+export interface GitHubTreeItem {
+  path: string;
+  mode: string;
+  type: "tree" | "blob";
+  sha: string;
+  size?: number;
+  url?: string;
+}
+
+/**
+ * Response payload structure from GitHub GET /repos/{owner}/{repo}/git/trees/{tree_sha}?recursive=1
+ */
+export interface GitHubTreeResponse {
+  sha: string;
+  url: string;
+  tree: GitHubTreeItem[];
+  truncated: boolean;
+}
+
+/**
+ * Response payload structure from GitHub GET /repos/{owner}/{repo}/contents/{path}
+ */
+export interface GitHubFileContentResponse {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  url: string;
+  html_url: string;
+  type: string;
+  content?: string;
+  encoding?: string;
+}

@@ -1,6 +1,10 @@
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
-import type { GitHubRawRepoResponse } from "./github.types.js";
+import type {
+  GitHubRawRepoResponse,
+  GitHubTreeResponse,
+  GitHubFileContentResponse,
+} from "./github.types.js";
 
 /**
  * GitHub REST API Client
@@ -15,7 +19,7 @@ export class GitHubClient {
   constructor() {
     this.baseUrl = env.GITHUB_API_URL.replace(/\/$/, "");
     this.defaultToken = env.GITHUB_TOKEN;
-    this.timeoutMs = 8000; // 8 second request timeout
+    this.timeoutMs = 15000; // 15 second request timeout for ingestion calls
   }
 
   /**
@@ -106,7 +110,37 @@ export class GitHubClient {
     const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
     return await this.get<GitHubRawRepoResponse>(endpoint, customToken);
   }
+
+  /**
+   * Fetches recursive git repository tree from GitHub GET /repos/{owner}/{repo}/git/trees/{tree_sha}?recursive=1
+   */
+  async fetchRepoTree(
+    owner: string,
+    repo: string,
+    treeSha: string = "HEAD",
+    customToken?: string
+  ): Promise<GitHubTreeResponse> {
+    const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(treeSha)}?recursive=1`;
+    return await this.get<GitHubTreeResponse>(endpoint, customToken);
+  }
+
+  /**
+   * Fetches raw file content from GitHub GET /repos/{owner}/{repo}/contents/{path}
+   */
+  async fetchFileContent(
+    owner: string,
+    repo: string,
+    filePath: string,
+    ref: string = "HEAD",
+    customToken?: string
+  ): Promise<GitHubFileContentResponse> {
+    const encodedPath = filePath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`;
+    return await this.get<GitHubFileContentResponse>(endpoint, customToken);
+  }
 }
 
 export const githubClient = new GitHubClient();
-

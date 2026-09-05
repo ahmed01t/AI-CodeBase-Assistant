@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../../middleware/auth.middleware.js";
 import { validateRequest } from "../../middleware/validation.middleware.js";
 import * as repositoryController from "./repository.controller.js";
+import * as ingestionController from "../ingestion/ingestion.controller.js";
 import {
   createRepositorySchema,
   repositoryParamSchema,
@@ -33,6 +34,17 @@ router.get(
 );
 
 /**
+ * GET /api/v1/repositories/sync/jobs/:jobId - Get ingestion job status & progress
+ */
+router.get("/sync/jobs/:jobId", ingestionController.getJobStatus);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/sync or /:id/sync - Trigger background repository synchronization
+ */
+router.post("/:repositoryId/sync", ingestionController.syncRepository);
+router.post("/:id/sync", ingestionController.syncRepository);
+
+/**
  * GET /api/v1/repositories/:id - Get a repository by ID
  */
 router.get(
@@ -51,4 +63,3 @@ router.delete(
 );
 
 export default router;
-

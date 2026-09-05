@@ -12,7 +12,7 @@ export class GitHubClient {
     constructor() {
         this.baseUrl = env.GITHUB_API_URL.replace(/\/$/, "");
         this.defaultToken = env.GITHUB_TOKEN;
-        this.timeoutMs = 8000; // 8 second request timeout
+        this.timeoutMs = 15000; // 15 second request timeout for ingestion calls
     }
     /**
      * Constructs headers required for GitHub REST API v3
@@ -82,6 +82,24 @@ export class GitHubClient {
      */
     async fetchRepoMetadata(owner, repo, customToken) {
         const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+        return await this.get(endpoint, customToken);
+    }
+    /**
+     * Fetches recursive git repository tree from GitHub GET /repos/{owner}/{repo}/git/trees/{tree_sha}?recursive=1
+     */
+    async fetchRepoTree(owner, repo, treeSha = "HEAD", customToken) {
+        const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(treeSha)}?recursive=1`;
+        return await this.get(endpoint, customToken);
+    }
+    /**
+     * Fetches raw file content from GitHub GET /repos/{owner}/{repo}/contents/{path}
+     */
+    async fetchFileContent(owner, repo, filePath, ref = "HEAD", customToken) {
+        const encodedPath = filePath
+            .split("/")
+            .map((segment) => encodeURIComponent(segment))
+            .join("/");
+        const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`;
         return await this.get(endpoint, customToken);
     }
 }

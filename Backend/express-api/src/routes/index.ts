@@ -5,6 +5,7 @@ import projectRouter from "../modules/projects/project.routes.js";
 import repositoryRouter from "../modules/repositories/repository.routes.js";
 import githubRouter from "../modules/github/github.routes.js";
 import userRouter from "../modules/users/user.routes.js";
+import ingestionRouter from "../modules/ingestion/ingestion.routes.js";
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use("/projects", projectRouter);
 router.use("/repositories", repositoryRouter);
 router.use("/github", githubRouter);
 router.use("/users", userRouter);
+router.use("/ingestion", ingestionRouter);
 
 export default router;
