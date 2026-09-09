@@ -1,0 +1,229 @@
+# =========================================================
+# AI CODEBASE ASSISTANT - API TEST SUITE (.http / REST Client)
+# =========================================================
+# Base URL: http://localhost:5000/api/v1
+# Replace {{token}}, {{orgId}}, {{projectId}}, {{repoId}}, {{userId}} with actual values.
+
+@baseUrl = http://localhost:5000/api/v1
+@supabaseUrl = https://cnnrjrxykpdchbbzgrtb.supabase.co
+@supabaseKey =sb_publishable_8k6NmUexN52pEE-qih-bWw_MNHblOvp
+
+@token =eyJhbGciOiJFUzI1NiIsImtpZCI6Ijg3ZGRmYzM5LTk5OTItNDc0Ny1iYTk5LTE5MzM5ODFmNWY2MiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2NubnJqcnh5a3BkY2hiYnpncnRiLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJhYTg5NWVjMS0wZTljLTRmM2MtODg3My03ZjI0OGRiMTZlMzMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzg4MjgzODAyLCJpYXQiOjE3ODgyODAyMDIsImVtYWlsIjoiZGV2dXNlckBleGFtcGxlLmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWxfdmVyaWZpZWQiOnRydWV9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzg4MjgwMjAyfV0sInNlc3Npb25faWQiOiJjODlkMDg3Ni0xYjhhLTRlZTQtOWQ3MC1jYmEzOTU4M2NjOGUiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.GjTo_oY6toIo8VykWmVhhOCu_AlVYOW65ZcCSfA2Z_tfehG-VXqI0F4oktgEYCJN5uhGCbNFUsGbFscdicCWag
+@orgId = 123e4567-e89b-12d3-a456-426614174000
+@projectId = 123e4567-e89b-12d3-a456-426614174001
+@repoId = 123e4567-e89b-12d3-a456-426614174002
+@userId = 123e4567-e89b-12d3-a456-426614174003
+
+
+# =========================================================
+# 0. SUPABASE AUTHENTICATION (Sign Up & Sign In to Get JWT Token)
+# =========================================================
+
+### 0.1 Sign Up (Create New User in Supabase Auth)
+POST {{supabaseUrl}}/auth/v1/signup
+apikey: {{supabaseKey}}
+Content-Type: application/json
+
+{
+  "email": "devuser@example.com",
+  "password": "TestPassword123!"
+}
+
+### 0.2 Sign In (Login & Obtain JWT Access Token)
+POST {{supabaseUrl}}/auth/v1/token?grant_type=password
+apikey: {{supabaseKey}}
+Content-Type: application/json
+
+{
+  "email": "devuser@example.com",
+  "password": "testpassword123"
+}
+
+
+# =========================================================
+# 1. HEALTH MODULE
+# =========================================================
+
+### 1.1 Health Check Endpoint (Public)
+GET {{baseUrl}}/health
+
+
+# =========================================================
+# 2. ORGANIZATIONS MODULE
+# =========================================================
+
+### 2.1 Create Organization
+POST {{baseUrl}}/organizations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Acme Corporation",
+  "slug": "acme-corp"
+}
+
+### 2.2 List Organizations Accessible to Authenticated User
+GET {{baseUrl}}/organizations
+Authorization: Bearer {{token}}
+
+### 2.3 Get Organization by ID
+GET {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{token}}
+
+### 2.4 Update Organization
+PATCH {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Acme Global Technologies"
+}
+
+### 2.5 Delete Organization
+DELETE {{baseUrl}}/organizations/{{orgId}}
+Authorization: Bearer {{token}}
+
+
+# =========================================================
+# 3. ORGANIZATION MEMBERS MODULE
+# =========================================================
+
+### 3.1 List Organization Members
+GET {{baseUrl}}/organizations/{{orgId}}/members
+Authorization: Bearer {{token}}
+
+### 3.2 Add User as Member
+POST {{baseUrl}}/organizations/{{orgId}}/members
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "user_id": "{{userId}}",
+  "role": "admin"
+}
+
+### 3.3 Update Member Role
+PATCH {{baseUrl}}/organizations/{{orgId}}/members/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "role": "member"
+}
+
+### 3.4 Remove Member from Organization
+DELETE {{baseUrl}}/organizations/{{orgId}}/members/{{userId}}
+Authorization: Bearer {{token}}
+
+
+# =========================================================
+# 4. PROJECTS MODULE
+# =========================================================
+
+### 4.1 Create Project inside Organization
+POST {{baseUrl}}/projects
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "organization_id": "{{orgId}}",
+  "name": "AI Code Assistant Backend"
+}
+
+### 4.2 List Projects (Optional ?organization_id= filter)
+GET {{baseUrl}}/projects
+Authorization: Bearer {{token}}
+
+### 4.3 Get Project by ID
+GET {{baseUrl}}/projects/{{projectId}}
+Authorization: Bearer {{token}}
+
+### 4.4 Update Project
+PATCH {{baseUrl}}/projects/{{projectId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated AI Project Title"
+}
+
+### 4.5 Delete Project
+DELETE {{baseUrl}}/projects/{{projectId}}
+Authorization: Bearer {{token}}
+
+
+# =========================================================
+# 5. REPOSITORIES MODULE
+# =========================================================
+
+### 5.1 Create Repository Record for a Project
+POST {{baseUrl}}/repositories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "project_id": "{{projectId}}",
+  "provider": "github",
+  "external_id": "12345678",
+  "owner": "facebook",
+  "name": "react",
+  "url": "https://github.com/facebook/react"
+}
+
+### 5.2 List All Accessible Repositories
+GET {{baseUrl}}/repositories
+Authorization: Bearer {{token}}
+
+### 5.3 List Repositories for a Specific Project
+GET {{baseUrl}}/projects/{{projectId}}/repositories
+Authorization: Bearer {{token}}
+
+### 5.4 Get Repository by ID
+GET {{baseUrl}}/repositories/{{repoId}}
+Authorization: Bearer {{token}}
+
+### 5.5 Delete Repository Record
+DELETE {{baseUrl}}/repositories/{{repoId}}
+Authorization: Bearer {{token}}
+
+
+# =========================================================
+# 6. GITHUB INTEGRATION MODULE
+# =========================================================
+
+### 6.1 Get GitHub Repository Metadata
+GET {{baseUrl}}/github/repos/facebook/react
+Authorization: Bearer {{token}}
+
+
+# =========================================================
+# 7. USER MODULE
+# =========================================================
+
+### 7.1 Get Current User Profile
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+
+### 7.2 Update Current User Profile
+PATCH {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "display_name": "Jane Developer",
+  "avatar_url": "https://example.com/avatars/jane.png"
+}
+
+
+# =========================================================
+# 8. REPOSITORY INGESTION MODULE
+# =========================================================
+
+### 8.1 Trigger Background Repository Synchronization (Non-Blocking)
+POST {{baseUrl}}/repositories/{{repoId}}/sync
+Authorization: Bearer {{token}}
+
+### 8.2 Get Ingestion Job Status & Progress
+GET {{baseUrl}}/repositories/sync/jobs/123e4567-e89b-12d3-a456-426614174000
+Authorization: Bearer {{token}}
+
