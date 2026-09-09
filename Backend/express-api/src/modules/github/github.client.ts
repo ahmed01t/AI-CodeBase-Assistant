@@ -104,8 +104,7 @@ export class GitHubClient {
   /**
    * Fetches raw repository metadata from GitHub GET /repos/{owner}/{repo}
    */
-  async fetchRepoMetadata(
-    owner: string,
+  async fetchRepoMetadata(   owner: string,
     repo: string,
     customToken?: string
   ): Promise<GitHubRawRepoResponse> {
