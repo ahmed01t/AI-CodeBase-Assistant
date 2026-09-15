@@ -1,6 +1,5 @@
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
-import type { GitHubRawRepoResponse } from "./github.types.js";
 import type {
   GitHubRawRepoResponse,
   GitHubTreeResponse,
