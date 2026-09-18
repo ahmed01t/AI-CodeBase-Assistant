@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 let isInitialized = false;
 const loadedLanguages: Map<string, any> = new Map();
-
+// checik if the module root is correct, if not, find the correct one
 function getModuleRoot(): string {
   let currentDir = __dirname;
   while (currentDir !== path.dirname(currentDir)) {
