@@ -55,9 +55,24 @@ export class EmbeddingClient {
     if (texts.length === 0) return [];
 
     try {
-      // Embed all texts concurrently
-      const promises = texts.map((text) => this.embedQuery(text));
-      return await Promise.all(promises);
+      // 1 single HTTP request containing all texts in the array!
+      const response = await this.ai.models.embedContent({
+        model: this.modelName,
+        contents: texts,
+      });
+
+      const embeddings = response.embeddings;
+      if (!embeddings || embeddings.length === 0) {
+        throw new ApiError(502, "Gemini API returned empty batch embeddings");
+      }
+
+      return embeddings.map((emb) => {
+        const values = emb.values || [];
+        return {
+          values,
+          dimension: values.length,
+        };
+      });
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(502, `Batch embedding failed: ${error.message}`);
