@@ -4,22 +4,65 @@ import { ApiError } from "../../utils/ApiError.js";
 import { EmbeddingVector } from "./embeddings.types.js";
 
 export class EmbeddingClient {
-    private readonly ai: GoogleGenAI;
-    private readonly model: string; 
+  private ai: GoogleGenAI;
+  public readonly modelName: string;
 
-    constructor(){
-        // get the gemini api key from the environment variable
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            throw new ApiError(500,"GEMINI_API_KEY is not set in the environment variables.");
-        }
-        // Initialize the GoogleGenAI client with the API key
-        this.ai = new GoogleGenAI({ apiKey });
-        this.model = "text-embedding-004";
-        
-
-
+  constructor() {
+    // 1. Get the Gemini API key from environment variables
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new ApiError(500, "GEMINI_API_KEY is not configured in environment variables");
     }
 
+    // 2. Initialize the official Google GenAI client
+    this.ai = new GoogleGenAI({ apiKey });
 
+    // 3. Google's standard embedding model
+    this.modelName = "text-embedding-004";
+  }
+
+  /**
+   * Generates an embedding vector for a single piece of text.
+   * Perfect for embedding user questions during semantic search.
+   */
+  public async embedQuery(text: string): Promise<EmbeddingVector> {
+    try {
+      const response = await this.ai.models.embedContent({
+        model: this.modelName,
+        contents: text,
+      });
+
+      const values = response.embeddings?.[0]?.values;
+      if (!values || values.length === 0) {
+        throw new ApiError(502, "Gemini API returned an empty embedding vector");
+      }
+
+      return {
+        values,
+        dimension: values.length, // 768 dimensions
+      };
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(502, `Failed to generate embedding from Gemini: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generates embedding vectors for multiple chunks in batch.
+   * Efficiently embeds many code chunks with minimal API calls.
+   */
+  public async embedBatch(texts: string[]): Promise<EmbeddingVector[]> {
+    if (texts.length === 0) return [];
+
+    try {
+      // Embed all texts concurrently
+      const promises = texts.map((text) => this.embedQuery(text));
+      return await Promise.all(promises);
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(502, `Batch embedding failed: ${error.message}`);
+    }
+  }
 }
+
+export const embeddingClient = new EmbeddingClient();
