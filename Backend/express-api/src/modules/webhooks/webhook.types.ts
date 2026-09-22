@@ -64,3 +64,4 @@ export interface IncrementalSyncResult {
   filesRemoved: number;
   totalChunksUpdated: number;
 }
+

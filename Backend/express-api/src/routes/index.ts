@@ -8,6 +8,7 @@ import userRouter from "../modules/users/user.routes.js";
 import ingestionRouter from "../modules/ingestion/ingestion.routes.js";
 import knowledgeRouter from "../modules/knowledge/knowledge.routes.js";
 import conversationRouter from "../modules/conversations/conversation.routes.js";
+import webhookRouter from "../modules/webhooks/webhook.routes.js";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use("/users", userRouter);
 router.use("/ingestion", ingestionRouter);
 router.use("/knowledge", knowledgeRouter);
 router.use("/conversations", conversationRouter);
+router.use("/webhooks", webhookRouter);
 
 export default router;
