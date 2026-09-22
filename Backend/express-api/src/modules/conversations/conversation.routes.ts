@@ -6,6 +6,7 @@ import {
   listConversations,
   getConversation,
   sendMessage,
+  sendMessageStream,
 } from "./conversation.controller.js";
 import {
   createConversationSchema,
@@ -46,4 +47,14 @@ router.post(
   sendMessage
 );
 
+router.post(
+  "/:id/messages/stream",
+  validateRequest({
+    params: conversationIdParamSchema,
+    body: sendMessageSchema,
+  }),
+  sendMessageStream
+);
+
 export default router;
+

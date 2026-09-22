@@ -137,7 +137,6 @@ def calculate_distance(x: float, y: float) -> float:
   console.log("   ✅ Sliding window fallback passed!");
 
   console.log("\n🎉 ALL CODE CHUNKER TESTS PASSED SUCCESSFULLY!");
-  process.exit(0);
 }
 
 runTests().catch((err) => {

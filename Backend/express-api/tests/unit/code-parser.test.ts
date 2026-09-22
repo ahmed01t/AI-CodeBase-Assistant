@@ -168,7 +168,6 @@ def calculate_area(radius: float) -> float:
   console.log("   ✅ Unsupported file handling passed!");
 
   console.log("\n🎉 ALL CODE PARSER TESTS PASSED SUCCESSFULLY!");
-  process.exit(0);
 }
 
 runTests().catch((err) => {

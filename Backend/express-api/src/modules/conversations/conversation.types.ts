@@ -37,3 +37,26 @@ export interface AgentResponse {
     symbolName?: string;
   }>;
 }
+
+export type AgentStreamEvent =
+  | { type: "run_started"; data: { agentRunId: string; conversationId: string } }
+  | { type: "tool_call"; data: { tool: string; query: string } }
+  | {
+      type: "tool_result";
+      data: {
+        tool: string;
+        totalMatches: number;
+        sources: Array<{ filePath?: string; similarity?: number; symbolName?: string }>;
+      };
+    }
+  | { type: "text_chunk"; data: { text: string } }
+  | {
+      type: "done";
+      data: {
+        userMessage: Message;
+        assistantMessage: Message;
+        agentRunId: string;
+        sourcesUsed: Array<{ filePath?: string; similarity?: number; symbolName?: string }>;
+      };
+    }
+  | { type: "error"; data: { error: string } };

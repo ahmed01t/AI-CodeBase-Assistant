@@ -9,7 +9,11 @@ let dbInstance: Db | null = null;
  * If MONGODB_URI is omitted in environment, returns null to allow fallback handling.
  */
 export async function getMongoDb(): Promise<Db | null> {
-  if (!env.MONGODB_URI) {
+  if (
+    !env.MONGODB_URI ||
+    (!env.MONGODB_URI.startsWith("mongodb://") &&
+      !env.MONGODB_URI.startsWith("mongodb+srv://"))
+  ) {
     return null;
   }
 

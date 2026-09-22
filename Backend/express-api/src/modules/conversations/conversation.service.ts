@@ -139,6 +139,102 @@ export class ConversationService {
       throw error;
     }
   }
+
+  /**
+   * Sends a user message and streams the AI agent's execution in real-time via SSE.
+   */
+  public async sendMessageStream(
+    supabase: SupabaseClient,
+    userId: string,
+    conversationId: string,
+    input: SendMessageInput,
+    onEvent: (event: import("./conversation.types.js").AgentStreamEvent) => void | Promise<void>
+  ): Promise<void> {
+    // 1. Verify conversation exists
+    const conversation = await conversationRepository.findConversationById(
+      supabase,
+      conversationId
+    );
+
+    if (!conversation) {
+      throw new ApiError(404, `Conversation with ID ${conversationId} not found`);
+    }
+
+    // 2. Save user message to database
+    const userMessage = await conversationRepository.createMessage(supabase, {
+      conversationId,
+      role: "user",
+      content: input.content,
+    });
+
+    // 3. Start Agent Run flight recorder
+    const runId = await conversationRepository.createAgentRun(supabase, {
+      conversationId,
+      projectId: conversation.projectId,
+      agentType: "code_assistant",
+    });
+
+    // 4. Emit run_started event
+    await onEvent({
+      type: "run_started",
+      data: { agentRunId: runId, conversationId },
+    });
+
+    try {
+      // 5. Fetch recent chat history
+      const chatHistory = await conversationRepository.listMessagesByConversationId(
+        supabase,
+        conversationId,
+        10
+      );
+
+      // 6. Run streaming agent execution
+      const agentOutput = await agentRunner.runAgentStream({
+        supabase,
+        projectId: conversation.projectId,
+        repositoryId: input.repositoryId,
+        userQuestion: input.content,
+        chatHistory,
+        onEvent,
+      });
+
+      // 7. Save Assistant message to database
+      const assistantMessage = await conversationRepository.createMessage(supabase, {
+        conversationId,
+        role: "assistant",
+        content: agentOutput.answer,
+      });
+
+      // 8. Complete Agent Run flight recorder
+      await conversationRepository.completeAgentRun(supabase, runId, "completed");
+
+      // 9. Emit done event
+      await onEvent({
+        type: "done",
+        data: {
+          userMessage,
+          assistantMessage,
+          agentRunId: runId,
+          sourcesUsed: agentOutput.sourcesUsed,
+        },
+      });
+    } catch (error: any) {
+      await conversationRepository.completeAgentRun(
+        supabase,
+        runId,
+        "failed",
+        error.message
+      );
+
+      await onEvent({
+        type: "error",
+        data: { error: error.message || "An error occurred during agent streaming." },
+      });
+
+      throw error;
+    }
+  }
 }
 
 export const conversationService = new ConversationService();
+

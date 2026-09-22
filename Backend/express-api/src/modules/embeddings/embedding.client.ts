@@ -18,7 +18,7 @@ export class EmbeddingClient {
     this.ai = new GoogleGenAI({ apiKey });
 
     // 3. Google's standard embedding model
-    this.modelName = "text-embedding-004";
+    this.modelName = "gemini-embedding-001";
   }
 
   /**
@@ -30,6 +30,9 @@ export class EmbeddingClient {
       const response = await this.ai.models.embedContent({
         model: this.modelName,
         contents: text,
+        config: {
+          outputDimensionality: 768,
+        },
       });
 
       const values = response.embeddings?.[0]?.values;
@@ -59,6 +62,9 @@ export class EmbeddingClient {
       const response = await this.ai.models.embedContent({
         model: this.modelName,
         contents: texts,
+        config: {
+          outputDimensionality: 768,
+        },
       });
 
       const embeddings = response.embeddings;

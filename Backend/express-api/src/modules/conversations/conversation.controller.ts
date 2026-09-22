@@ -118,3 +118,58 @@ export async function sendMessage(
     next(error);
   }
 }
+
+/**
+ * POST /api/v1/conversations/:id/messages/stream
+ * Streams agent response token-by-token and tool calls in real-time via Server-Sent Events (SSE)
+ */
+export async function sendMessageStream(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const token = req.token!;
+    const userId = req.userId!;
+    const supabase = getAuthenticatedSupabaseClient(token);
+    const conversationId = req.params.id as string;
+    const input: SendMessageSchema = req.body;
+
+    // Set Server-Sent Events headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    let isClientConnected = true;
+    req.on("close", () => {
+      isClientConnected = false;
+    });
+
+    const sendSSE = (event: import("./conversation.types.js").AgentStreamEvent) => {
+      if (!isClientConnected) return;
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`);
+    };
+
+    await conversationService.sendMessageStream(
+      supabase,
+      userId,
+      conversationId,
+      input,
+      sendSSE
+    );
+
+    res.end();
+  } catch (error: any) {
+    if (res.headersSent) {
+      res.write(
+        `event: error\ndata: ${JSON.stringify({ error: error.message || "Streaming failed" })}\n\n`
+      );
+      res.end();
+    } else {
+      next(error);
+    }
+  }
+}
+
