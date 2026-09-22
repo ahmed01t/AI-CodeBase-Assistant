@@ -15,6 +15,7 @@ const envSchema = z.object({
   // GitHub Integration Configuration
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_API_URL: z.string().url().default("https://api.github.com"),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
 
   // Google Gemini Configuration
   GEMINI_API_KEY: z.string().optional(),

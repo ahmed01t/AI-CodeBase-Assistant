@@ -227,3 +227,54 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/repositories/sync/jobs/123e4567-e89b-12d3-a456-426614174000
 Authorization: Bearer {{token}}
 
+
+# =========================================================
+# 9. KNOWLEDGE RETRIEVAL MODULE (Semantic Search)
+# =========================================================
+
+### 9.1 Semantic Vector Search over Codebase (RAG)
+POST {{baseUrl}}/knowledge/search
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "query": "Where is the authentication middleware implemented?",
+  "projectId": "{{projectId}}",
+  "limit": 5,
+  "similarityThreshold": 0.4
+}
+
+
+# =========================================================
+# 10. AI CODE ASSISTANT & CONVERSATIONS MODULE
+# =========================================================
+
+### 10.1 Start a New Chat Conversation
+# @name createConversation
+POST {{baseUrl}}/conversations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "projectId": "{{projectId}}",
+  "title": "Authentication Architecture Discussion"
+}
+
+### 10.2 List All Previous Conversations
+GET {{baseUrl}}/conversations?projectId={{projectId}}&limit=20
+Authorization: Bearer {{token}}
+
+### 10.3 Get Conversation Details & Message History
+GET {{baseUrl}}/conversations/123e4567-e89b-12d3-a456-426614174000
+Authorization: Bearer {{token}}
+
+### 10.4 Send Message & Run Autonomous AI Agent (with Tool Calling & Citations)
+POST {{baseUrl}}/conversations/123e4567-e89b-12d3-a456-426614174000/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "content": "Explain how user authentication works in this repository and what files handle token verification."
+}
+
+
