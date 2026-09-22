@@ -7,6 +7,7 @@ import githubRouter from "../modules/github/github.routes.js";
 import userRouter from "../modules/users/user.routes.js";
 import ingestionRouter from "../modules/ingestion/ingestion.routes.js";
 import knowledgeRouter from "../modules/knowledge/knowledge.routes.js";
+import conversationRouter from "../modules/conversations/conversation.routes.js";
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use("/github", githubRouter);
 router.use("/users", userRouter);
 router.use("/ingestion", ingestionRouter);
 router.use("/knowledge", knowledgeRouter);
+router.use("/conversations", conversationRouter);
 
 export default router;
