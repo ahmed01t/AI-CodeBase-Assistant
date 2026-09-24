@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
@@ -27,105 +26,45 @@ export interface AgentRunStreamInput extends AgentRunInput {
 }
 
 export class AgentRunner {
-  private ai: GoogleGenAI;
-  private candidateModels: string[];
+  private baseUrl: string;
+  private modelName: string;
 
   constructor() {
-    const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new ApiError(500, "GEMINI_API_KEY is not configured");
-    }
-
-    this.ai = new GoogleGenAI({ apiKey });
-    // Prioritized list of active Gemini and Gemma models
-    this.candidateModels = [
-      "gemini-3.1-flash-lite",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash",
-      "gemma-4-26b-a4b-it",
-    ];
+    this.baseUrl = env.OLLAMA_BASE_URL.replace(/\/$/, "");
+    this.modelName = env.OLLAMA_CHAT_MODEL;
   }
 
   /**
-   * Helper to execute generateContentStream with model fallback
+   * Builds conversation message list for Ollama /api/chat
    */
-  private async streamWithFallback(params: {
-    contents: any;
-    systemInstruction: string;
-    temperature?: number;
-  }) {
-    let lastError: any = null;
-
-    for (const model of this.candidateModels) {
-      try {
-        const stream = await this.ai.models.generateContentStream({
-          model,
-          contents: params.contents,
-          config: {
-            systemInstruction: params.systemInstruction,
-            temperature: params.temperature ?? 0.2,
-          },
-        });
-        return { stream, model };
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[AgentRunner] Model ${model} unavailable: ${err?.message || err}. Trying next candidate...`);
-      }
-    }
-
-    throw lastError || new Error("All candidate Gemini models failed to respond.");
-  }
-
-  /**
-   * Helper to execute generateContent with model fallback
-   */
-  private async generateWithFallback(params: {
-    contents: any;
-    systemInstruction: string;
-    temperature?: number;
-  }) {
-    let lastError: any = null;
-
-    for (const model of this.candidateModels) {
-      try {
-        const response = await this.ai.models.generateContent({
-          model,
-          contents: params.contents,
-          config: {
-            systemInstruction: params.systemInstruction,
-            temperature: params.temperature ?? 0.2,
-          },
-        });
-        return { response, model };
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[AgentRunner] Model ${model} unavailable: ${err?.message || err}. Trying next candidate...`);
-      }
-    }
-
-    throw lastError || new Error("All candidate Gemini models failed to respond.");
-  }
-
-  /**
-   * Builds conversation context and prompt for the LLM
-   */
-  private buildPromptContext(
+  private buildChatMessages(
     userQuestion: string,
     chatHistory: Message[],
     retrievedChunks: any[]
-  ) {
-    const contents: Array<any> = [];
+  ): Array<{ role: string; content: string }> {
+    const messages: Array<{ role: string; content: string }> = [];
 
-    // 1. Add previous conversation turns
+    // 1. System Prompt
+    const systemPrompt = `You are CodePilot AI, a Senior AI Codebase Assistant running on a local inference engine.
+Your mission is to assist developers in understanding, debugging, navigating, and improving their codebase.
+
+GUIDELINES:
+1. When relevant code snippets from the codebase are provided in the prompt, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
+2. If code snippets are not available or no exact match was found, explain the concept thoroughly based on standard TypeScript / Express / Node.js architectural patterns and where such files are conventionally placed.
+3. Provide complete, clean, syntax-highlighted code blocks with language specifiers (e.g., \`\`\`typescript ... \`\`\`).
+4. Be concise, precise, friendly, and well-structured using markdown headings and bullet points.`;
+
+    messages.push({ role: "system", content: systemPrompt });
+
+    // 2. Chat history (last 6 turns)
     for (const msg of chatHistory.slice(-6)) {
-      if (msg.role === "user") {
-        contents.push({ role: "user", parts: [{ text: msg.content }] });
-      } else if (msg.role === "assistant") {
-        contents.push({ role: "model", parts: [{ text: msg.content }] });
-      }
+      messages.push({
+        role: msg.role === "assistant" ? "assistant" : "user",
+        content: msg.content,
+      });
     }
 
-    // 2. Format current prompt with codebase context
+    // 3. Current user prompt with retrieved codebase context
     let promptWithContext = userQuestion;
 
     if (retrievedChunks && retrievedChunks.length > 0) {
@@ -139,22 +78,13 @@ export class AgentRunner {
       promptWithContext = `Relevant Code Snippets from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
     }
 
-    contents.push({ role: "user", parts: [{ text: promptWithContext }] });
+    messages.push({ role: "user", content: promptWithContext });
 
-    const systemInstruction = `You are CodePilot AI, an expert Senior AI Codebase Assistant.
-Your mission is to assist developers in understanding, debugging, navigating, and improving their codebase.
-
-GUIDELINES:
-1. When code snippets from the codebase are provided, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
-2. If code snippets are not provided or no exact match was found, explain the concept thoroughly based on standard TypeScript / Express / Node.js architectural patterns and explain where such files are conventionally placed.
-3. Provide complete, clean, syntax-highlighted code blocks with language specifiers (e.g., \`\`\`typescript ... \`\`\`).
-4. Be concise, precise, friendly, and structured (use headings, bullet points, and code snippets).`;
-
-    return { contents, systemInstruction };
+    return messages;
   }
 
   /**
-   * Executes the AI Code Assistant agent synchronously.
+   * Executes the AI Code Assistant agent synchronously using local Ollama.
    */
   public async runAgent(input: AgentRunInput): Promise<AgentRunOutput> {
     const { supabase, projectId, repositoryId, userQuestion, chatHistory } = input;
@@ -184,21 +114,31 @@ GUIDELINES:
       });
     }
 
-    // 2. Build Prompt & Execute LLM with Fallback
-    const { contents, systemInstruction } = this.buildPromptContext(
+    // 2. Build Chat Messages
+    const messages = this.buildChatMessages(
       userQuestion,
       chatHistory,
       searchResults.results || []
     );
 
     try {
-      const { response } = await this.generateWithFallback({
-        contents,
-        systemInstruction,
-        temperature: 0.2,
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.modelName,
+          messages,
+          stream: false,
+        }),
       });
 
-      const answer = response.text || "I was unable to generate a response. Please try again.";
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Ollama chat error (${response.status}): ${errorText}`);
+      }
+
+      const data = (await response.json()) as { message?: { content?: string } };
+      const answer = data.message?.content || "I was unable to generate a response from local Ollama.";
 
       return {
         answer,
@@ -206,12 +146,12 @@ GUIDELINES:
       };
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(502, `AI Agent execution failed: ${error?.message || error}`);
+      throw new ApiError(502, `Local Ollama execution failed: ${error?.message || error}`);
     }
   }
 
   /**
-   * Executes the AI Code Assistant agent with real-time SSE streaming.
+   * Executes the AI Code Assistant agent with real-time SSE streaming using local Ollama.
    */
   public async runAgentStream(input: AgentRunStreamInput): Promise<AgentRunOutput> {
     const { supabase, projectId, repositoryId, userQuestion, chatHistory, onEvent } = input;
@@ -260,8 +200,8 @@ GUIDELINES:
       },
     });
 
-    // 4. Build Prompt & Stream final answer synthesis
-    const { contents, systemInstruction } = this.buildPromptContext(
+    // 4. Build Chat Messages & Stream tokens via SSE
+    const messages = this.buildChatMessages(
       userQuestion,
       chatHistory,
       searchResults.results || []
@@ -270,20 +210,52 @@ GUIDELINES:
     let fullAnswer = "";
 
     try {
-      const { stream } = await this.streamWithFallback({
-        contents,
-        systemInstruction,
-        temperature: 0.2,
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.modelName,
+          messages,
+          stream: true,
+        }),
       });
 
-      for await (const chunk of stream) {
-        const textChunk = chunk.text || "";
-        if (textChunk) {
-          fullAnswer += textChunk;
-          await onEvent({
-            type: "text_chunk",
-            data: { text: textChunk },
-          });
+      if (!response.ok || !response.body) {
+        const errorText = await response.text();
+        throw new Error(`Ollama chat stream error (${response.status}): ${errorText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line) as {
+              message?: { content?: string };
+              done?: boolean;
+            };
+
+            const token = parsed.message?.content || "";
+            if (token) {
+              fullAnswer += token;
+              await onEvent({
+                type: "text_chunk",
+                data: { text: token },
+              });
+            }
+          } catch {
+            // Ignore incomplete JSON chunks in streaming lines
+          }
         }
       }
 
@@ -293,7 +265,7 @@ GUIDELINES:
       };
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(502, `AI Agent streaming failed: ${error?.message || error}`);
+      throw new ApiError(502, `Local Ollama streaming failed: ${error?.message || error}`);
     }
   }
 }

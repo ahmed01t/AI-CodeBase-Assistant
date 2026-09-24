@@ -1,87 +1,108 @@
-import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { EmbeddingVector } from "./embeddings.types.js";
 
 export class EmbeddingClient {
-  private ai: GoogleGenAI;
+  private baseUrl: string;
   public readonly modelName: string;
 
   constructor() {
-    // 1. Get the Gemini API key from environment variables
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new ApiError(500, "GEMINI_API_KEY is not configured in environment variables");
-    }
-
-    // 2. Initialize the official Google GenAI client
-    this.ai = new GoogleGenAI({ apiKey });
-
-    // 3. Google's standard embedding model
-    this.modelName = "gemini-embedding-001";
+    this.baseUrl = env.OLLAMA_BASE_URL.replace(/\/$/, "");
+    this.modelName = env.OLLAMA_EMBEDDING_MODEL;
   }
 
   /**
-   * Generates an embedding vector for a single piece of text.
-   * Perfect for embedding user questions during semantic search.
+   * Generates an embedding vector for a single piece of text using local Ollama.
    */
   public async embedQuery(text: string): Promise<EmbeddingVector> {
     try {
-      const response = await this.ai.models.embedContent({
-        model: this.modelName,
-        contents: text,
-        config: {
-          outputDimensionality: 768,
-        },
+      const response = await fetch(`${this.baseUrl}/api/embed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.modelName,
+          input: text,
+        }),
       });
 
-      const values = response.embeddings?.[0]?.values;
+      if (!response.ok) {
+        // Fallback to /api/embeddings for legacy Ollama versions
+        const fallbackRes = await fetch(`${this.baseUrl}/api/embeddings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: this.modelName,
+            prompt: text,
+          }),
+        });
+
+        if (!fallbackRes.ok) {
+          const errorText = await fallbackRes.text();
+          throw new Error(`Ollama embedding error (${fallbackRes.status}): ${errorText}`);
+        }
+
+        const data = (await fallbackRes.json()) as { embedding: number[] };
+        const values = data.embedding || [];
+        return {
+          values,
+          dimension: values.length,
+        };
+      }
+
+      const data = (await response.json()) as { embeddings: number[][] };
+      const values = data.embeddings?.[0] || [];
+
       if (!values || values.length === 0) {
-        throw new ApiError(502, "Gemini API returned an empty embedding vector");
+        throw new ApiError(502, "Ollama returned an empty embedding vector");
       }
 
       return {
         values,
-        dimension: values.length, // 768 dimensions
+        dimension: values.length,
       };
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(502, `Failed to generate embedding from Gemini: ${error.message}`);
+      throw new ApiError(502, `Failed to generate local Ollama embedding: ${error.message}`);
     }
   }
 
   /**
-   * Generates embedding vectors for multiple chunks in batch.
-   * Efficiently embeds many code chunks with minimal API calls.
+   * Generates embedding vectors for multiple chunks in batch using local Ollama.
    */
   public async embedBatch(texts: string[]): Promise<EmbeddingVector[]> {
     if (texts.length === 0) return [];
 
     try {
-      // 1 single HTTP request containing all texts in the array!
-      const response = await this.ai.models.embedContent({
-        model: this.modelName,
-        contents: texts,
-        config: {
-          outputDimensionality: 768,
-        },
+      // Send batch directly to /api/embed
+      const response = await fetch(`${this.baseUrl}/api/embed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.modelName,
+          input: texts,
+        }),
       });
 
-      const embeddings = response.embeddings;
-      if (!embeddings || embeddings.length === 0) {
-        throw new ApiError(502, "Gemini API returned empty batch embeddings");
+      if (!response.ok) {
+        // Fallback: embed sequentially via /api/embeddings
+        const results: EmbeddingVector[] = [];
+        for (const text of texts) {
+          const vec = await this.embedQuery(text);
+          results.push(vec);
+        }
+        return results;
       }
 
-      return embeddings.map((emb) => {
-        const values = emb.values || [];
-        return {
-          values,
-          dimension: values.length,
-        };
-      });
+      const data = (await response.json()) as { embeddings: number[][] };
+      const embeddings = data.embeddings || [];
+
+      return embeddings.map((values) => ({
+        values,
+        dimension: values.length,
+      }));
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(502, `Batch embedding failed: ${error.message}`);
+      throw new ApiError(502, `Local Ollama batch embedding failed: ${error.message}`);
     }
   }
 }

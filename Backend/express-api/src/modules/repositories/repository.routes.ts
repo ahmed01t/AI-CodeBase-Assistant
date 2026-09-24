@@ -39,8 +39,10 @@ router.get(
 router.get("/sync/jobs/:jobId", ingestionController.getJobStatus);
 
 /**
- * POST /api/v1/repositories/:repositoryId/sync or /:id/sync - Trigger background repository synchronization
+ * POST /api/v1/repositories/:repositoryId/sync or /sync/:repositoryId - Trigger background repository synchronization
  */
+router.post("/sync/:repositoryId", ingestionController.syncRepository);
+router.post("/sync/:id", ingestionController.syncRepository);
 router.post("/:repositoryId/sync", ingestionController.syncRepository);
 router.post("/:id/sync", ingestionController.syncRepository);
 

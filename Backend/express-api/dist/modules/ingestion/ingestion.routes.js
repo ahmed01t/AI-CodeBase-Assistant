@@ -5,12 +5,21 @@ const router = Router({ mergeParams: true });
 // Require authentication for all ingestion routes
 router.use(requireAuth);
 /**
- * POST /api/v1/repositories/:repositoryId/sync - Trigger background repository synchronization
+ * Trigger background repository synchronization
+ * Supports all client URL variations:
+ * - POST /api/v1/ingestion/sync/:repositoryId
+ * - POST /api/v1/ingestion/sync/:id
+ * - POST /api/v1/ingestion/:repositoryId/sync
+ * - POST /api/v1/ingestion/:id/sync
  */
+router.post("/sync/:repositoryId", ingestionController.syncRepository);
+router.post("/sync/:id", ingestionController.syncRepository);
 router.post("/:repositoryId/sync", ingestionController.syncRepository);
 router.post("/:id/sync", ingestionController.syncRepository);
 /**
- * GET /api/v1/repositories/sync/jobs/:jobId - Get job status and progress
+ * Ingestion Job Status & Progress Polling
  */
 router.get("/sync/jobs/:jobId", ingestionController.getJobStatus);
+router.get("/jobs/:jobId", ingestionController.getJobStatus);
+router.get("/:jobId/status", ingestionController.getJobStatus);
 export default router;

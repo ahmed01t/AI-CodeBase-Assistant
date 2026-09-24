@@ -5,7 +5,6 @@ import { defaultIngestionFilter } from "./ingestion.filter.js";
 import { codeChunkerService } from "../code-chunker/code-chunker.service.js";
 import { embeddingService } from "../embeddings/embedding.service.js";
 import { getAuthenticatedSupabaseClient } from "../../lib/supabase.js";
-import { env } from "../../config/env.js";
 /**
  * Background Ingestion Worker
  * Executes repository tree retrieval, filtering, content fetching, and persistence
@@ -91,9 +90,8 @@ export class IngestionWorker {
                         code: decodedContent,
                         filePath: fileItem.path,
                     });
-                    // D. Generate & Store vector embeddings if Gemini key and docId are available
-                    const geminiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-                    if (docId && chunkResult.chunks.length > 0 && geminiKey) {
+                    // D. Generate & Store vector embeddings via local Ollama
+                    if (docId && chunkResult.chunks.length > 0) {
                         try {
                             const supabase = getAuthenticatedSupabaseClient(userToken);
                             await embeddingService.processAndStoreChunks(docId, chunkResult.chunks, supabase);
