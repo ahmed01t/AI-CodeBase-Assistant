@@ -5,6 +5,7 @@ import { defaultIngestionFilter, IngestionFilter } from "./ingestion.filter.js";
 import { codeChunkerService } from "../code-chunker/code-chunker.service.js";
 import { embeddingService } from "../embeddings/embedding.service.js";
 import { getAuthenticatedSupabaseClient } from "../../lib/supabase.js";
+import { env } from "../../config/env.js";
 import type { IngestionTaskContext, RawFileDocument } from "./ingestion.types.js";
 
 /**
@@ -96,8 +97,8 @@ export class IngestionWorker {
                 : fileContentRes.content;
           }
 
-          const filename = path.basename(fileItem.path);
-          const ext = path.extname(filename).replace(/^\./, "");
+          const filename = path.posix.basename(fileItem.path);
+          const ext = path.posix.extname(filename).replace(/^\./, "");
 
           // A. Store raw file content in MongoDB
           const rawDoc: RawFileDocument = {
@@ -133,7 +134,8 @@ export class IngestionWorker {
           });
 
           // D. Generate & Store vector embeddings if Gemini key and docId are available
-          if (docId && chunkResult.chunks.length > 0 && (process.env.GEMINI_API_KEY || (globalThis as any).process?.env?.GEMINI_API_KEY)) {
+          const geminiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+          if (docId && chunkResult.chunks.length > 0 && geminiKey) {
             try {
               const supabase = getAuthenticatedSupabaseClient(userToken);
               await embeddingService.processAndStoreChunks(
