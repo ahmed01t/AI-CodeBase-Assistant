@@ -58,12 +58,14 @@ export class IngestionRepository {
         return job;
     }
     /**
-     * Upserts file metadata into PostgreSQL public.knowledge_documents
+     * Upserts file metadata into PostgreSQL public.knowledge_documents and returns the document ID.
      */
     async upsertKnowledgeDocument(token, data) {
         const client = getAuthenticatedSupabaseClient(token);
         try {
-            const { error } = await client.from("knowledge_documents").upsert({
+            const { data: record } = await client
+                .from("knowledge_documents")
+                .upsert({
                 project_id: data.projectId,
                 repository_id: data.repositoryId,
                 source_type: "repository",
@@ -73,22 +75,29 @@ export class IngestionRepository {
                 content_hash: data.contentHash,
                 status: "indexed",
                 updated_at: new Date().toISOString(),
-            }, { onConflict: "project_id, source_uri" });
-            if (error) {
-                await client.from("knowledge_documents").insert({
-                    project_id: data.projectId,
-                    repository_id: data.repositoryId,
-                    source_type: "repository",
-                    title: data.title,
-                    source_uri: data.sourceUri,
-                    mime_type: data.mimeType,
-                    content_hash: data.contentHash,
-                    status: "indexed",
-                });
-            }
+            }, { onConflict: "project_id, source_uri" })
+                .select("id")
+                .maybeSingle();
+            if (record?.id)
+                return record.id;
+            const { data: inserted } = await client
+                .from("knowledge_documents")
+                .insert({
+                project_id: data.projectId,
+                repository_id: data.repositoryId,
+                source_type: "repository",
+                title: data.title,
+                source_uri: data.sourceUri,
+                mime_type: data.mimeType,
+                content_hash: data.contentHash,
+                status: "indexed",
+            })
+                .select("id")
+                .maybeSingle();
+            return inserted?.id || "";
         }
         catch {
-            // Ignore conflict error if document record already exists
+            return "";
         }
     }
     /**

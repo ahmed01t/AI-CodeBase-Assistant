@@ -73,16 +73,29 @@ export const api = {
 
   // Projects
   listProjects: (organizationId?: string) =>
-    apiRequest(organizationId ? `/projects?organizationId=${organizationId}` : "/projects"),
+    apiRequest(
+      organizationId
+        ? `/projects?organization_id=${organizationId}&organizationId=${organizationId}`
+        : "/projects"
+    ),
   createProject: (organizationId: string, name: string, description?: string) =>
     apiRequest("/projects", {
       method: "POST",
-      body: JSON.stringify({ organizationId, name, description }),
+      body: JSON.stringify({
+        organization_id: organizationId,
+        organizationId: organizationId,
+        name,
+        description,
+      }),
     }),
 
   // Repositories
   listRepositories: (projectId?: string) =>
-    apiRequest(projectId ? `/repositories?projectId=${projectId}` : "/repositories"),
+    apiRequest(
+      projectId
+        ? `/repositories?project_id=${projectId}&projectId=${projectId}`
+        : "/repositories"
+    ),
   createRepository: (body: {
     projectId: string;
     provider: string;
@@ -93,7 +106,16 @@ export const api = {
   }) =>
     apiRequest("/repositories", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        project_id: body.projectId,
+        projectId: body.projectId,
+        provider: body.provider,
+        external_id: body.externalId || `${body.owner}-${body.name}`,
+        externalId: body.externalId || `${body.owner}-${body.name}`,
+        owner: body.owner,
+        name: body.name,
+        url: body.url,
+      }),
     }),
 
   // Ingestion

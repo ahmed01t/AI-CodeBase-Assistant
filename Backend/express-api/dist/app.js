@@ -9,7 +9,11 @@ app.use(cors({
     origin: "http://localhost:3000",
     credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({
+    verify: (req, _res, buf) => {
+        req.rawBody = buf;
+    },
+}));
 app.use("/api/v1", routes);
 // Global Error Handler Middleware
 app.use(errorHandler);

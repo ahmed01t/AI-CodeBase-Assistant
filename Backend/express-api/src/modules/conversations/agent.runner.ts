@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
@@ -28,7 +28,7 @@ export interface AgentRunStreamInput extends AgentRunInput {
 
 export class AgentRunner {
   private ai: GoogleGenAI;
-  private modelName: string;
+  private candidateModels: string[];
 
   constructor() {
     const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
@@ -37,40 +37,86 @@ export class AgentRunner {
     }
 
     this.ai = new GoogleGenAI({ apiKey });
-    this.modelName = "gemini-2.5-flash";
+    // Prioritized list of active Gemini and Gemma models
+    this.candidateModels = [
+      "gemini-3.1-flash-lite",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemma-4-26b-a4b-it",
+    ];
   }
 
   /**
-   * Executes the autonomous AI Code Assistant agent synchronously.
+   * Helper to execute generateContentStream with model fallback
    */
-  public async runAgent(input: AgentRunInput): Promise<AgentRunOutput> {
-    const { supabase, projectId, repositoryId, userQuestion, chatHistory } = input;
-    const sourcesUsed: AgentRunOutput["sourcesUsed"] = [];
+  private async streamWithFallback(params: {
+    contents: any;
+    systemInstruction: string;
+    temperature?: number;
+  }) {
+    let lastError: any = null;
 
-    // 1. Tool Declaration for Gemini: search_codebase
-    const searchCodebaseTool = {
-      functionDeclarations: [
-        {
-          name: "search_codebase",
-          description: "Search the codebase semantically using vector similarity to find relevant functions, classes, and code chunks.",
-          parameters: {
-            type: Type.OBJECT,
-            properties: {
-              query: {
-                type: Type.STRING,
-                description: "The semantic search query text (e.g. 'authentication middleware', 'user repository')",
-              },
-            },
-            required: ["query"],
+    for (const model of this.candidateModels) {
+      try {
+        const stream = await this.ai.models.generateContentStream({
+          model,
+          contents: params.contents,
+          config: {
+            systemInstruction: params.systemInstruction,
+            temperature: params.temperature ?? 0.2,
           },
-        },
-      ],
-    };
+        });
+        return { stream, model };
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[AgentRunner] Model ${model} unavailable: ${err?.message || err}. Trying next candidate...`);
+      }
+    }
 
-    // 2. Format chat history for Gemini contents
-    const contents: Array<{ role: string; parts: Array<{ text?: string; functionCall?: any; functionResponse?: any }> }> = [];
+    throw lastError || new Error("All candidate Gemini models failed to respond.");
+  }
 
-    // Add previous conversation turns
+  /**
+   * Helper to execute generateContent with model fallback
+   */
+  private async generateWithFallback(params: {
+    contents: any;
+    systemInstruction: string;
+    temperature?: number;
+  }) {
+    let lastError: any = null;
+
+    for (const model of this.candidateModels) {
+      try {
+        const response = await this.ai.models.generateContent({
+          model,
+          contents: params.contents,
+          config: {
+            systemInstruction: params.systemInstruction,
+            temperature: params.temperature ?? 0.2,
+          },
+        });
+        return { response, model };
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[AgentRunner] Model ${model} unavailable: ${err?.message || err}. Trying next candidate...`);
+      }
+    }
+
+    throw lastError || new Error("All candidate Gemini models failed to respond.");
+  }
+
+  /**
+   * Builds conversation context and prompt for the LLM
+   */
+  private buildPromptContext(
+    userQuestion: string,
+    chatHistory: Message[],
+    retrievedChunks: any[]
+  ) {
+    const contents: Array<any> = [];
+
+    // 1. Add previous conversation turns
     for (const msg of chatHistory.slice(-6)) {
       if (msg.role === "user") {
         contents.push({ role: "user", parts: [{ text: msg.content }] });
@@ -79,95 +125,78 @@ export class AgentRunner {
       }
     }
 
-    // Add current user question
-    contents.push({ role: "user", parts: [{ text: userQuestion }] });
+    // 2. Format current prompt with codebase context
+    let promptWithContext = userQuestion;
 
-    const systemInstruction = `You are a Senior AI Codebase Assistant.
-Your job is to answer developer questions accurately using the repository's code.
-RULES:
-1. When asked about code, architecture, or features, ALWAYS use the 'search_codebase' tool to find the exact implementation.
-2. Cite the exact file paths (e.g. 'src/modules/users/user.service.ts') and line numbers where possible.
-3. Be concise, professional, and explain concepts clearly.
-4. If you don't find relevant code in the search results, state clearly what was found and what is missing.`;
+    if (retrievedChunks && retrievedChunks.length > 0) {
+      const codeContext = retrievedChunks
+        .map(
+          (c, idx) =>
+            `--- Code Snippet #${idx + 1} (${c.metadata?.filePath || "unknown"} : lines ${c.metadata?.startLine || 1}-${c.metadata?.endLine || "?"}) ---\n${c.content}`
+        )
+        .join("\n\n");
+
+      promptWithContext = `Relevant Code Snippets from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
+    }
+
+    contents.push({ role: "user", parts: [{ text: promptWithContext }] });
+
+    const systemInstruction = `You are CodePilot AI, an expert Senior AI Codebase Assistant.
+Your mission is to assist developers in understanding, debugging, navigating, and improving their codebase.
+
+GUIDELINES:
+1. When code snippets from the codebase are provided, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
+2. If code snippets are not provided or no exact match was found, explain the concept thoroughly based on standard TypeScript / Express / Node.js architectural patterns and explain where such files are conventionally placed.
+3. Provide complete, clean, syntax-highlighted code blocks with language specifiers (e.g., \`\`\`typescript ... \`\`\`).
+4. Be concise, precise, friendly, and structured (use headings, bullet points, and code snippets).`;
+
+    return { contents, systemInstruction };
+  }
+
+  /**
+   * Executes the AI Code Assistant agent synchronously.
+   */
+  public async runAgent(input: AgentRunInput): Promise<AgentRunOutput> {
+    const { supabase, projectId, repositoryId, userQuestion, chatHistory } = input;
+    const sourcesUsed: AgentRunOutput["sourcesUsed"] = [];
+
+    // 1. Search vector database for matching code chunks
+    let searchResults: { results: any[]; totalMatches: number } = { results: [], totalMatches: 0 };
+    if (supabase) {
+      try {
+        searchResults = await knowledgeService.searchCodebase(supabase, {
+          query: userQuestion,
+          projectId,
+          repositoryId,
+          limit: 6,
+          similarityThreshold: 0.35,
+        });
+      } catch (err: any) {
+        console.warn(`[Agent] Codebase vector search notice: ${err?.message}`);
+      }
+    }
+
+    for (const r of searchResults.results || []) {
+      sourcesUsed.push({
+        filePath: r.metadata?.filePath,
+        similarity: r.similarity,
+        symbolName: r.metadata?.symbolName,
+      });
+    }
+
+    // 2. Build Prompt & Execute LLM with Fallback
+    const { contents, systemInstruction } = this.buildPromptContext(
+      userQuestion,
+      chatHistory,
+      searchResults.results || []
+    );
 
     try {
-      // 3. First LLM Call: Generate content (LLM decides if it needs tools)
-      let response = await this.ai.models.generateContent({
-        model: this.modelName,
+      const { response } = await this.generateWithFallback({
         contents,
-        config: {
-          systemInstruction,
-          tools: [searchCodebaseTool as any],
-          temperature: 0.2,
-        },
+        systemInstruction,
+        temperature: 0.2,
       });
-
-      // 4. Handle Tool Calls if Gemini requested one
-      const functionCalls = response.functionCalls;
-
-      if (functionCalls && functionCalls.length > 0) {
-        for (const call of functionCalls) {
-          if (call.name === "search_codebase") {
-            const searchQuery = (call.args as any)?.query || userQuestion;
-
-            // Execute vector search in PostgreSQL
-            const searchResults = await knowledgeService.searchCodebase(supabase, {
-              query: searchQuery,
-              projectId,
-              repositoryId,
-              limit: 5,
-              similarityThreshold: 0.4,
-            });
-
-            // Track sources for citation
-            for (const r of searchResults.results) {
-              sourcesUsed.push({
-                filePath: r.metadata?.filePath,
-                similarity: r.similarity,
-                symbolName: r.metadata?.symbolName,
-              });
-            }
-
-            // Append model's tool call to conversation history
-            contents.push({
-              role: "model",
-              parts: [{ functionCall: call }],
-            });
-
-            // Append tool execution result
-            contents.push({
-              role: "user",
-              parts: [
-                {
-                  functionResponse: {
-                    name: "search_codebase",
-                    response: {
-                      totalMatches: searchResults.totalMatches,
-                      chunks: searchResults.results.map((c) => ({
-                        content: c.content,
-                        filePath: c.metadata?.filePath,
-                        startLine: c.metadata?.startLine,
-                        endLine: c.metadata?.endLine,
-                        symbolName: c.metadata?.symbolName,
-                      })),
-                    },
-                  },
-                },
-              ],
-            });
-          }
-        }
-
-        // 5. Second LLM Call: Give tool results to Gemini to synthesize final answer
-        response = await this.ai.models.generateContent({
-          model: this.modelName,
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.2,
-          },
-        });
-      }
 
       const answer = response.text || "I was unable to generate a response. Please try again.";
 
@@ -177,172 +206,85 @@ RULES:
       };
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(502, `AI Agent execution failed: ${error.message}`);
+      throw new ApiError(502, `AI Agent execution failed: ${error?.message || error}`);
     }
   }
 
   /**
-   * Executes the autonomous AI Code Assistant agent with real-time SSE streaming.
+   * Executes the AI Code Assistant agent with real-time SSE streaming.
    */
   public async runAgentStream(input: AgentRunStreamInput): Promise<AgentRunOutput> {
     const { supabase, projectId, repositoryId, userQuestion, chatHistory, onEvent } = input;
     const sourcesUsed: AgentRunOutput["sourcesUsed"] = [];
 
-    // 1. Tool Declaration for Gemini: search_codebase
-    const searchCodebaseTool = {
-      functionDeclarations: [
-        {
-          name: "search_codebase",
-          description: "Search the codebase semantically using vector similarity to find relevant functions, classes, and code chunks.",
-          parameters: {
-            type: Type.OBJECT,
-            properties: {
-              query: {
-                type: Type.STRING,
-                description: "The semantic search query text (e.g. 'authentication middleware', 'user repository')",
-              },
-            },
-            required: ["query"],
-          },
-        },
-      ],
-    };
+    // 1. Notify client that codebase search has started
+    await onEvent({
+      type: "tool_call",
+      data: {
+        tool: "search_codebase",
+        query: userQuestion,
+      },
+    });
 
-    // 2. Format chat history for Gemini contents
-    const contents: Array<{ role: string; parts: Array<{ text?: string; functionCall?: any; functionResponse?: any }> }> = [];
-
-    for (const msg of chatHistory.slice(-6)) {
-      if (msg.role === "user") {
-        contents.push({ role: "user", parts: [{ text: msg.content }] });
-      } else if (msg.role === "assistant") {
-        contents.push({ role: "model", parts: [{ text: msg.content }] });
+    // 2. Search vector database for matching code chunks
+    let searchResults: { results: any[]; totalMatches: number } = { results: [], totalMatches: 0 };
+    if (supabase) {
+      try {
+        searchResults = await knowledgeService.searchCodebase(supabase, {
+          query: userQuestion,
+          projectId,
+          repositoryId,
+          limit: 6,
+          similarityThreshold: 0.35,
+        });
+      } catch (err: any) {
+        console.warn(`[Agent] Codebase vector search notice: ${err?.message}`);
       }
     }
 
-    contents.push({ role: "user", parts: [{ text: userQuestion }] });
+    for (const r of searchResults.results || []) {
+      sourcesUsed.push({
+        filePath: r.metadata?.filePath,
+        similarity: r.similarity,
+        symbolName: r.metadata?.symbolName,
+      });
+    }
 
-    const systemInstruction = `You are a Senior AI Codebase Assistant.
-Your job is to answer developer questions accurately using the repository's code.
-RULES:
-1. When asked about code, architecture, or features, ALWAYS use the 'search_codebase' tool to find the exact implementation.
-2. Cite the exact file paths (e.g. 'src/modules/users/user.service.ts') and line numbers where possible.
-3. Be concise, professional, and explain concepts clearly.
-4. If you don't find relevant code in the search results, state clearly what was found and what is missing.`;
+    // 3. Emit tool result with citations to frontend
+    await onEvent({
+      type: "tool_result",
+      data: {
+        tool: "search_codebase",
+        totalMatches: searchResults.totalMatches,
+        sources: sourcesUsed,
+      },
+    });
+
+    // 4. Build Prompt & Stream final answer synthesis
+    const { contents, systemInstruction } = this.buildPromptContext(
+      userQuestion,
+      chatHistory,
+      searchResults.results || []
+    );
+
+    let fullAnswer = "";
 
     try {
-      // 3. First LLM Call: Check if Gemini requests a tool call
-      const firstResponse = await this.ai.models.generateContent({
-        model: this.modelName,
+      const { stream } = await this.streamWithFallback({
         contents,
-        config: {
-          systemInstruction,
-          tools: [searchCodebaseTool as any],
-          temperature: 0.2,
-        },
+        systemInstruction,
+        temperature: 0.2,
       });
 
-      const functionCalls = firstResponse.functionCalls;
-      let fullAnswer = "";
-
-      if (functionCalls && functionCalls.length > 0) {
-        for (const call of functionCalls) {
-          if (call.name === "search_codebase") {
-            const searchQuery = (call.args as any)?.query || userQuestion;
-
-            // Emit tool_call event to client stream
-            await onEvent({
-              type: "tool_call",
-              data: {
-                tool: "search_codebase",
-                query: searchQuery,
-              },
-            });
-
-            // Execute vector search in PostgreSQL
-            const searchResults = await knowledgeService.searchCodebase(supabase, {
-              query: searchQuery,
-              projectId,
-              repositoryId,
-              limit: 5,
-              similarityThreshold: 0.4,
-            });
-
-            // Track sources for citation
-            for (const r of searchResults.results) {
-              sourcesUsed.push({
-                filePath: r.metadata?.filePath,
-                similarity: r.similarity,
-                symbolName: r.metadata?.symbolName,
-              });
-            }
-
-            // Emit tool_result event to client stream
-            await onEvent({
-              type: "tool_result",
-              data: {
-                tool: "search_codebase",
-                totalMatches: searchResults.totalMatches,
-                sources: sourcesUsed,
-              },
-            });
-
-            // Append tool call & result to context
-            contents.push({
-              role: "model",
-              parts: [{ functionCall: call }],
-            });
-
-            contents.push({
-              role: "user",
-              parts: [
-                {
-                  functionResponse: {
-                    name: "search_codebase",
-                    response: {
-                      totalMatches: searchResults.totalMatches,
-                      chunks: searchResults.results.map((c) => ({
-                        content: c.content,
-                        filePath: c.metadata?.filePath,
-                        startLine: c.metadata?.startLine,
-                        endLine: c.metadata?.endLine,
-                        symbolName: c.metadata?.symbolName,
-                      })),
-                    },
-                  },
-                },
-              ],
-            });
-          }
+      for await (const chunk of stream) {
+        const textChunk = chunk.text || "";
+        if (textChunk) {
+          fullAnswer += textChunk;
+          await onEvent({
+            type: "text_chunk",
+            data: { text: textChunk },
+          });
         }
-
-        // 4. Stream final answer synthesis
-        const responseStream = await this.ai.models.generateContentStream({
-          model: this.modelName,
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.2,
-          },
-        });
-
-        for await (const chunk of responseStream) {
-          const textChunk = chunk.text || "";
-          if (textChunk) {
-            fullAnswer += textChunk;
-            await onEvent({
-              type: "text_chunk",
-              data: { text: textChunk },
-            });
-          }
-        }
-      } else {
-        // No tool calls needed, stream or emit direct answer
-        const directText = firstResponse.text || "I was unable to generate a response.";
-        fullAnswer = directText;
-        await onEvent({
-          type: "text_chunk",
-          data: { text: directText },
-        });
       }
 
       return {
@@ -351,11 +293,9 @@ RULES:
       };
     } catch (error: any) {
       if (error instanceof ApiError) throw error;
-      throw new ApiError(502, `AI Agent streaming failed: ${error.message}`);
+      throw new ApiError(502, `AI Agent streaming failed: ${error?.message || error}`);
     }
   }
 }
 
 export const agentRunner = new AgentRunner();
-
-

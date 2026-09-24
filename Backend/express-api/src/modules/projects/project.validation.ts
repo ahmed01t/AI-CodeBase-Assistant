@@ -3,28 +3,36 @@ import { z } from "zod";
 /**
  * Validation schema for POST /api/v1/projects (Create Project)
  */
-export const createProjectSchema = z.object({
-  organization_id: z
-    .string()
-    .uuid("Invalid organization ID format. Must be a valid UUID"),
-  name: z
-    .string()
-    .trim()
-    .min(1, "Project name is required")
-    .max(100, "Project name must be 100 characters or less"),
-  slug: z
-    .string()
-    .trim()
-    .min(1, "Slug cannot be empty")
-    .max(100, "Slug must be 100 characters or less")
-    .regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens")
-    .optional(),
-  description: z
-    .string()
-    .trim()
-    .max(500, "Description must be 500 characters or less")
-    .optional(),
-});
+export const createProjectSchema = z
+  .object({
+    organization_id: z.string().uuid("Invalid organization ID format. Must be a valid UUID").optional(),
+    organizationId: z.string().uuid("Invalid organization ID format. Must be a valid UUID").optional(),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Project name is required")
+      .max(100, "Project name must be 100 characters or less"),
+    slug: z
+      .string()
+      .trim()
+      .min(1, "Slug cannot be empty")
+      .max(100, "Slug must be 100 characters or less")
+      .regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens")
+      .optional(),
+    description: z
+      .string()
+      .trim()
+      .max(500, "Description must be 500 characters or less")
+      .optional(),
+  })
+  .transform((data) => ({
+    ...data,
+    organization_id: data.organization_id || data.organizationId || "",
+  }))
+  .refine((data) => Boolean(data.organization_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.organization_id)), {
+    message: "Invalid organization ID format. Must be a valid UUID",
+    path: ["organization_id"],
+  });
 
 /**
  * Validation schema for PATCH /api/v1/projects/:id (Update Project)
@@ -65,6 +73,11 @@ export const projectParamSchema = z.object({
 /**
  * Validation schema for GET /api/v1/projects query parameters
  */
-export const listProjectsQuerySchema = z.object({
-  organization_id: z.string().uuid("Invalid organization ID format").optional(),
-});
+export const listProjectsQuerySchema = z
+  .object({
+    organization_id: z.string().uuid("Invalid organization ID format").optional(),
+    organizationId: z.string().uuid("Invalid organization ID format").optional(),
+  })
+  .transform((data) => ({
+    organization_id: data.organization_id || data.organizationId,
+  }));

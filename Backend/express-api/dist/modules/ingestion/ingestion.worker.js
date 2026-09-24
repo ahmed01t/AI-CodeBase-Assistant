@@ -2,6 +2,9 @@ import path from "path";
 import { githubClient } from "../github/github.client.js";
 import { ingestionRepository } from "./ingestion.repository.js";
 import { defaultIngestionFilter } from "./ingestion.filter.js";
+import { codeChunkerService } from "../code-chunker/code-chunker.service.js";
+import { embeddingService } from "../embeddings/embedding.service.js";
+import { getAuthenticatedSupabaseClient } from "../../lib/supabase.js";
 /**
  * Background Ingestion Worker
  * Executes repository tree retrieval, filtering, content fetching, and persistence
@@ -74,7 +77,7 @@ export class IngestionWorker {
                     };
                     await this.repository.storeRawFile(rawDoc);
                     // B. Store file metadata in PostgreSQL knowledge_documents
-                    await this.repository.upsertKnowledgeDocument(userToken, {
+                    const docId = await this.repository.upsertKnowledgeDocument(userToken, {
                         projectId,
                         repositoryId,
                         title: fileItem.path,
@@ -82,6 +85,21 @@ export class IngestionWorker {
                         mimeType: "text/plain",
                         contentHash: fileItem.sha,
                     });
+                    // C. Chunk the code file using AST Parser / Sliding Window
+                    const chunkResult = await codeChunkerService.chunkFile({
+                        code: decodedContent,
+                        filePath: fileItem.path,
+                    });
+                    // D. Generate & Store vector embeddings if Gemini key and docId are available
+                    if (docId && chunkResult.chunks.length > 0 && (process.env.GEMINI_API_KEY || globalThis.process?.env?.GEMINI_API_KEY)) {
+                        try {
+                            const supabase = getAuthenticatedSupabaseClient(userToken);
+                            await embeddingService.processAndStoreChunks(docId, chunkResult.chunks, supabase);
+                        }
+                        catch (embErr) {
+                            console.warn(`[IngestionWorker] Vector embedding notice for '${fileItem.path}': ${embErr.message}`);
+                        }
+                    }
                     processedCount++;
                     // Periodically update progress (scale 15% -> 95%)
                     const progressPercent = Math.min(95, Math.floor(15 + (processedCount / validFiles.length) * 80));

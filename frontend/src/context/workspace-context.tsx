@@ -20,6 +20,9 @@ interface WorkspaceContextType {
   setActiveConversationId: (id: string | null) => void;
   theme: "dark" | "light";
   toggleTheme: () => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
   refreshWorkspace: () => Promise<void>;
   loading: boolean;
 }
@@ -37,6 +40,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Initialize theme from localStorage or system preference
@@ -59,6 +63,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle("dark", newTheme === "dark");
   };
 
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => !prev);
+  };
+
   const refreshWorkspace = async () => {
     if (!user) return;
     setLoading(true);
@@ -67,9 +75,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       let orgs: Organization[] = [];
       try {
         orgs = await api.listOrganizations();
-      } catch {
-        // Fallback default org for demo
-        orgs = [{ id: "org-1", name: "Acme Corp", slug: "acme-corp", createdAt: new Date().toISOString() }];
+        if (!orgs || orgs.length === 0) {
+          // Auto-provision personal workspace organization
+          const orgName = `${user.name || user.email.split("@")[0]}'s Workspace`;
+          const orgSlug = `ws-${Date.now().toString(36)}`;
+          const createdOrg = await api.createOrganization(orgName, orgSlug);
+          if (createdOrg) {
+            orgs = [createdOrg];
+          }
+        }
+      } catch (e) {
+        console.warn("[Workspace] Organization sync warning:", e);
       }
       setOrganizations(orgs);
       const currentOrg = orgs[0] || null;
@@ -77,18 +93,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       // 2. Fetch Projects
       let projs: Project[] = [];
-      try {
-        projs = await api.listProjects(currentOrg?.id);
-      } catch {
-        projs = [
-          {
-            id: "proj-1",
-            organizationId: currentOrg?.id || "org-1",
-            name: "Core Backend API",
-            description: "Express + TypeScript codebase assistant",
-            createdAt: new Date().toISOString(),
-          },
-        ];
+      if (currentOrg) {
+        try {
+          projs = await api.listProjects(currentOrg.id);
+          if (!projs || projs.length === 0) {
+            // Auto-provision primary project
+            const createdProj = await api.createProject(
+              currentOrg.id,
+              "Main Codebase",
+              "Primary codebase repository and AI chat workspace"
+            );
+            if (createdProj) {
+              projs = [createdProj];
+            }
+          }
+        } catch (e) {
+          console.warn("[Workspace] Project sync warning:", e);
+        }
       }
       setProjects(projs);
       const currentProj = projs[0] || null;
@@ -96,50 +117,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       // 3. Fetch Repositories
       let repos: Repository[] = [];
-      try {
-        repos = await api.listRepositories(currentProj?.id);
-      } catch {
-        repos = [
-          {
-            id: "repo-1",
-            projectId: currentProj?.id || "proj-1",
-            provider: "github",
-            owner: "ahmed01t",
-            name: "AI-CodeBase-Assistant",
-            url: "https://github.com/ahmed01t/AI-CodeBase-Assistant",
-            defaultBranch: "main",
-            status: "synced",
-            totalChunks: 1420,
-            lastSyncedAt: new Date().toISOString(),
-          },
-        ];
+      if (currentProj) {
+        try {
+          repos = await api.listRepositories(currentProj.id);
+        } catch (e) {
+          console.warn("[Workspace] Repositories fetch warning:", e);
+        }
       }
       setRepositories(repos);
       setActiveRepo(repos[0] || null);
 
       // 4. Fetch Conversations
       let convs: Conversation[] = [];
-      try {
-        convs = await api.listConversations(currentProj?.id);
-      } catch {
-        convs = [
-          {
-            id: "conv-1",
-            projectId: currentProj?.id || "proj-1",
-            userId: user.id,
-            title: "Auth Middleware Explanation",
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: "conv-2",
-            projectId: currentProj?.id || "proj-1",
-            userId: user.id,
-            title: "Tree-sitter WASM Setup",
-            createdAt: new Date(Date.now() - 7200000).toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ];
+      if (currentProj) {
+        try {
+          convs = await api.listConversations(currentProj.id);
+        } catch (e) {
+          console.warn("[Workspace] Conversations fetch warning:", e);
+        }
       }
       setConversations(convs);
       if (convs.length > 0 && !activeConversationId) {
@@ -175,6 +170,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setActiveConversationId,
         theme,
         toggleTheme,
+        sidebarOpen,
+        setSidebarOpen,
+        toggleSidebar,
         refreshWorkspace,
         loading,
       }}
@@ -191,4 +189,3 @@ export function useWorkspace() {
   }
   return context;
 }
-

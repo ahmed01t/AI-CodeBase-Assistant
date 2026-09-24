@@ -12,6 +12,7 @@ export class GitHubClient {
     constructor() {
         this.baseUrl = env.GITHUB_API_URL.replace(/\/$/, "");
         this.defaultToken = env.GITHUB_TOKEN;
+        this.timeoutMs = 8000; // 8 second request timeout
         this.timeoutMs = 15000; // 15 second request timeout for ingestion calls
     }
     /**

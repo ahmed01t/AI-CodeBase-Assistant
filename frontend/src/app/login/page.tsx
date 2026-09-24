@@ -80,10 +80,16 @@ export default function LoginPage() {
         router.replace("/");
       }
     } catch (err: any) {
-      setErrorMsg(
-        err.message ||
-          "Authentication failed. Please check your credentials and try again."
-      );
+      if (err.message?.includes("Failed to fetch") || err.name === "TypeError") {
+        setErrorMsg(
+          "Network Error: Unable to reach your Supabase database instance. Please verify that your Supabase project is active (not paused/deleted) and that NEXT_PUBLIC_SUPABASE_URL in frontend/.env.local is correct."
+        );
+      } else {
+        setErrorMsg(
+          err.message ||
+            "Authentication failed. Please check your credentials and try again."
+        );
+      }
     } finally {
       setLoading(false);
     }
