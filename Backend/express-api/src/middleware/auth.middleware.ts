@@ -21,10 +21,7 @@ export async function requireAuth(
 
     const token = authHeader.substring("Bearer ".length);
 
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(token);
+    const { data: { user }, error,} = await supabase.auth.getUser(token);
 
     if (error || !user) {
       throw new ApiError(401, "Invalid or expired authentication token");
