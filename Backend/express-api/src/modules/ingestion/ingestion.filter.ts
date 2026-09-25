@@ -30,6 +30,21 @@ export class IngestionFilter {
     ".turbo",
   ]);
 
+  // Specific file names to skip (lock files and generated package manifests)
+  private ignoredFileNames: Set<string> = new Set([
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "bun.lockb",
+    "bun.lock",
+    "composer.lock",
+    "cargo.lock",
+    "gemfile.lock",
+    "poetry.lock",
+    "pipfile.lock",
+    "flake.lock",
+  ]);
+
   // Binary, media, archive, and non-text file extensions to skip
   private ignoredExtensions: Set<string> = new Set([
     // Images
@@ -41,10 +56,10 @@ export class IngestionFilter {
     // Compiled Executables & Binaries
     "exe", "dll", "so", "dylib", "class", "pyc", "o", "obj", "pdf", "wasm", "jar", "war", "ear",
     // Fonts & Lock Files
-    "ttf", "woff", "woff2", "eot", "otf", "lock", "ds_store",
+    "ttf", "woff", "woff2", "eot", "otf", "lock", "ds_store", "map",
   ]);
 
-  // Secret file patterns that MUST NEVER be ingested under any circumstance
+  // Secret, minified, and lock file patterns that MUST NEVER be ingested
   private secretPatterns: RegExp[] = [
     /^\.env(\..*)?$/i,
     /.*\.pem$/i,
@@ -58,6 +73,8 @@ export class IngestionFilter {
     /.*\.kdbx$/i,
     /^aws_credentials$/i,
     /.*\.secret$/i,
+    /.*\.min\.(js|css)$/i,
+    /.*-lock\.json$/i,
   ];
 
   constructor(options?: FilterPolicyOptions) {
@@ -79,20 +96,25 @@ export class IngestionFilter {
       }
     }
 
-    // 2. Check secret pattern protection (NEVER INGEST SECRETS)
+    // 2. Check specific ignored file names (e.g. package-lock.json, yarn.lock)
+    if (this.ignoredFileNames.has(fileName.toLowerCase())) {
+      return false;
+    }
+
+    // 3. Check secret, minified, and lock pattern protection
     for (const pattern of this.secretPatterns) {
       if (pattern.test(fileName)) {
         return false;
       }
     }
 
-    // 3. Check extension ignore list
+    // 4. Check extension ignore list
     const ext = path.extname(fileName).toLowerCase().replace(/^\./, "");
     if (ext && this.ignoredExtensions.has(ext)) {
       return false;
     }
 
-    // 4. Check maximum file size limit
+    // 5. Check maximum file size limit
     if (size !== undefined && size > this.maxSizeBytes) {
       return false;
     }
@@ -102,4 +124,3 @@ export class IngestionFilter {
 }
 
 export const defaultIngestionFilter = new IngestionFilter();
-

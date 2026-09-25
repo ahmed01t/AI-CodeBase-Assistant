@@ -96,12 +96,12 @@ export class IngestionFilter {
                 return false;
             }
         }
-        // 3. Check extension ignore list
+        // 4. Check extension ignore list
         const ext = path.extname(fileName).toLowerCase().replace(/^\./, "");
         if (ext && this.ignoredExtensions.has(ext)) {
             return false;
         }
-        // 4. Check maximum file size limit
+        // 5. Check maximum file size limit
         if (size !== undefined && size > this.maxSizeBytes) {
             return false;
         }
