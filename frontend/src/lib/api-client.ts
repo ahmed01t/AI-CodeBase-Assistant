@@ -117,6 +117,10 @@ export const api = {
         url: body.url,
       }),
     }),
+  deleteRepository: (id: string) =>
+    apiRequest(`/repositories/${id}`, {
+      method: "DELETE",
+    }),
 
   // Ingestion
   syncRepository: (repositoryId: string, branch = "main") =>
@@ -154,4 +158,3 @@ export const api = {
       body: JSON.stringify({ content, repositoryId }),
     }),
 };
-

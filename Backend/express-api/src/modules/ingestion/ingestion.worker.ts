@@ -2,16 +2,12 @@ import path from "path";
 import { githubClient } from "../github/github.client.js";
 import { ingestionRepository, IngestionRepository } from "./ingestion.repository.js";
 import { defaultIngestionFilter, IngestionFilter } from "./ingestion.filter.js";
-import { codeChunkerService } from "../code-chunker/code-chunker.service.js";
-import { embeddingService } from "../embeddings/embedding.service.js";
-import { getAuthenticatedSupabaseClient } from "../../lib/supabase.js";
-import { env } from "../../config/env.js";
 import type { IngestionTaskContext, RawFileDocument } from "./ingestion.types.js";
 
 /**
- * Background Ingestion Worker
- * Executes repository tree retrieval, filtering, content fetching, and persistence
- * completely outside the HTTP request/response lifecycle.
+ * High-Speed Repository Ingestion Worker
+ * Fetches repository file trees, filters out secrets & lockfiles, and persists
+ * clean source files directly into MongoDB and PostgreSQL metadata in seconds.
  */
 export class IngestionWorker {
   constructor(
@@ -20,7 +16,7 @@ export class IngestionWorker {
   ) {}
 
   /**
-   * Main entry point for executing a queued ingestion job in the background.
+   * Main entry point for executing an ingestion sync job in the background.
    */
   async runJob(context: IngestionTaskContext): Promise<void> {
     const {
@@ -34,39 +30,38 @@ export class IngestionWorker {
       customGithubToken,
     } = context;
 
-    console.log(`[IngestionWorker] Starting background sync for job ${jobId} (${owner}/${repo})...`);
+    console.log(`[IngestionWorker] Starting fast sync for job ${jobId} (${owner}/${repo})...`);
 
     try {
       // 1. Mark job as running
       await this.repository.updateJob(userToken, jobId, {
         status: "running",
         started_at: new Date().toISOString(),
-        progress: 5,
+        progress: 10,
       });
 
       // 2. Fetch repository git tree recursively from GitHub REST API
       const treeResponse = await githubClient.fetchRepoTree(
         owner,
         repo,
-        defaultBranch,
+        defaultBranch || "HEAD",
         customGithubToken
       );
 
       const allItems = treeResponse.tree || [];
 
-      // 3. Filter items using ignore policy (exclude blobs, directories, secrets, binaries)
+      // 3. Filter items using ignore policy (exclude lockfiles, binaries, secrets)
       const validFiles = allItems.filter(
         (item) => item.type === "blob" && this.filter.shouldIngestFile(item.path, item.size)
       );
 
       console.log(
-        `[IngestionWorker] Job ${jobId}: Tree fetched (${allItems.length} items). Identified ${validFiles.length} valid files to ingest.`
+        `[IngestionWorker] Job ${jobId}: Tree fetched (${allItems.length} items). Ingesting ${validFiles.length} clean source files.`
       );
 
-      await this.repository.updateJob(userToken, jobId, { progress: 15 });
+      await this.repository.updateJob(userToken, jobId, { progress: 20 });
 
       if (validFiles.length === 0) {
-        // No valid files to process
         await this.repository.updateJob(userToken, jobId, {
           status: "completed",
           progress: 100,
@@ -76,7 +71,7 @@ export class IngestionWorker {
         return;
       }
 
-      // 4. Process valid files sequentially with progress tracking
+      // 4. Fetch and store clean source files
       let processedCount = 0;
 
       for (const fileItem of validFiles) {
@@ -85,7 +80,7 @@ export class IngestionWorker {
             owner,
             repo,
             fileItem.path,
-            defaultBranch,
+            defaultBranch || "HEAD",
             customGithubToken
           );
 
@@ -100,7 +95,7 @@ export class IngestionWorker {
           const filename = path.posix.basename(fileItem.path);
           const ext = path.posix.extname(filename).replace(/^\./, "");
 
-          // A. Store raw file content in MongoDB
+          // A. Store raw file content in MongoDB (cached for On-Demand Code Explorer)
           const rawDoc: RawFileDocument = {
             repository_id: repositoryId,
             project_id: projectId,
@@ -117,8 +112,8 @@ export class IngestionWorker {
 
           await this.repository.storeRawFile(rawDoc);
 
-          // B. Store file metadata in PostgreSQL knowledge_documents
-          const docId = await this.repository.upsertKnowledgeDocument(userToken, {
+          // B. Record file metadata in PostgreSQL knowledge_documents
+          await this.repository.upsertKnowledgeDocument(userToken, {
             projectId,
             repositoryId,
             title: fileItem.path,
@@ -127,44 +122,22 @@ export class IngestionWorker {
             contentHash: fileItem.sha,
           });
 
-          // C. Chunk the code file using AST Parser / Sliding Window
-          const chunkResult = await codeChunkerService.chunkFile({
-            code: decodedContent,
-            filePath: fileItem.path,
-          });
-
-          // D. Generate & Store vector embeddings via local Ollama
-          if (docId && chunkResult.chunks.length > 0) {
-            try {
-              const supabase = getAuthenticatedSupabaseClient(userToken);
-              await embeddingService.processAndStoreChunks(
-                docId,
-                chunkResult.chunks,
-                supabase
-              );
-            } catch (embErr: any) {
-              console.warn(
-                `[IngestionWorker] Vector embedding notice for '${fileItem.path}': ${embErr.message}`
-              );
-            }
-          }
-
           processedCount++;
 
-          // Periodically update progress (scale 15% -> 95%)
+          // Progress updates
           const progressPercent = Math.min(
             95,
-            Math.floor(15 + (processedCount / validFiles.length) * 80)
+            Math.floor(20 + (processedCount / validFiles.length) * 75)
           );
 
-          if (processedCount % 5 === 0 || processedCount === validFiles.length) {
+          if (processedCount % 10 === 0 || processedCount === validFiles.length) {
             await this.repository.updateJob(userToken, jobId, {
               progress: progressPercent,
             });
           }
         } catch (fileError: any) {
           console.warn(
-            `[IngestionWorker] Partial warning on file '${fileItem.path}' in job ${jobId}: ${fileError.message}`
+            `[IngestionWorker] Notice on file '${fileItem.path}' in job ${jobId}: ${fileError.message}`
           );
         }
       }
@@ -181,7 +154,7 @@ export class IngestionWorker {
       await this.repository.updateRepositoryLastSynced(userToken, repositoryId);
 
       console.log(
-        `[IngestionWorker] Job ${jobId} completed successfully! Synced ${processedCount} files.`
+        `\x1b[32m✓ [IngestionWorker] Job ${jobId} completed successfully! Cached ${processedCount} files in MongoDB.\x1b[0m`
       );
     } catch (error: any) {
       console.error(`[IngestionWorker] Job ${jobId} failed:`, error.message);
@@ -198,4 +171,3 @@ export class IngestionWorker {
 }
 
 export const ingestionWorker = new IngestionWorker();
-

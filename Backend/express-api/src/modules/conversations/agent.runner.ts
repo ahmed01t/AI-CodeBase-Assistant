@@ -1,7 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
-import { knowledgeService } from "../knowledge/knowledge.service.js";
+import { codeExplorerService, CodeSearchMatch } from "../code-explorer/code-explorer.service.js";
 import { Message, AgentStreamEvent } from "./conversation.types.js";
 
 export interface AgentRunInput {
@@ -18,6 +18,8 @@ export interface AgentRunOutput {
     filePath?: string;
     similarity?: number;
     symbolName?: string;
+    startLine?: number;
+    endLine?: number;
   }>;
 }
 
@@ -25,6 +27,11 @@ export interface AgentRunStreamInput extends AgentRunInput {
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
 }
 
+/**
+ * On-Demand Agentic Codebase Assistant Runner
+ * Explores repository code dynamically on user request, reads relevant files,
+ * and streams accurate answers via local Ollama.
+ */
 export class AgentRunner {
   private baseUrl: string;
   private modelName: string;
@@ -35,24 +42,24 @@ export class AgentRunner {
   }
 
   /**
-   * Builds conversation message list for Ollama /api/chat
+   * Constructs conversation messages for local Ollama /api/chat
    */
   private buildChatMessages(
     userQuestion: string,
     chatHistory: Message[],
-    retrievedChunks: any[]
+    codeMatches: CodeSearchMatch[]
   ): Array<{ role: string; content: string }> {
     const messages: Array<{ role: string; content: string }> = [];
 
     // 1. System Prompt
-    const systemPrompt = `You are CodePilot AI, a Senior AI Codebase Assistant running on a local inference engine.
-Your mission is to assist developers in understanding, debugging, navigating, and improving their codebase.
+    const systemPrompt = `You are CodePilot AI, a Senior AI Codebase Assistant running on a high-speed local inference engine.
+Your mission is to help developers understand, navigate, debug, and improve their codebase.
 
 GUIDELINES:
-1. When relevant code snippets from the codebase are provided in the prompt, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
-2. If code snippets are not available or no exact match was found, explain the concept thoroughly based on standard TypeScript / Express / Node.js architectural patterns and where such files are conventionally placed.
+1. When relevant code snippets from the codebase are provided, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
+2. Explain architectural decisions, call hierarchies, and implementation details clearly.
 3. Provide complete, clean, syntax-highlighted code blocks with language specifiers (e.g., \`\`\`typescript ... \`\`\`).
-4. Be concise, precise, friendly, and well-structured using markdown headings and bullet points.`;
+4. Be structured, precise, and concise using markdown headings and bullet points.`;
 
     messages.push({ role: "system", content: systemPrompt });
 
@@ -64,18 +71,20 @@ GUIDELINES:
       });
     }
 
-    // 3. Current user prompt with retrieved codebase context
+    // 3. Current user prompt with retrieved live codebase context
     let promptWithContext = userQuestion;
 
-    if (retrievedChunks && retrievedChunks.length > 0) {
-      const codeContext = retrievedChunks
+    if (codeMatches && codeMatches.length > 0) {
+      const codeContext = codeMatches
         .map(
           (c, idx) =>
-            `--- Code Snippet #${idx + 1} (${c.metadata?.filePath || "unknown"} : lines ${c.metadata?.startLine || 1}-${c.metadata?.endLine || "?"}) ---\n${c.content}`
+            `--- Code Snippet #${idx + 1}: ${c.filePath} (lines ${c.startLine}-${c.endLine}${
+              c.symbolName ? `, symbol: ${c.symbolName}` : ""
+            }) ---\n${c.snippet}`
         )
         .join("\n\n");
 
-      promptWithContext = `Relevant Code Snippets from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
+      promptWithContext = `Relevant Code from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
     }
 
     messages.push({ role: "user", content: promptWithContext });
@@ -87,34 +96,37 @@ GUIDELINES:
    * Executes the AI Code Assistant agent synchronously using local Ollama.
    */
   public async runAgent(input: AgentRunInput): Promise<AgentRunOutput> {
-    const { supabase, projectId, repositoryId, userQuestion, chatHistory } = input;
+    const { projectId, repositoryId, userQuestion, chatHistory } = input;
     const sourcesUsed: AgentRunOutput["sourcesUsed"] = [];
 
-    // 1. Search vector database for matching code chunks
-    let searchResults: { results: any[]; totalMatches: number } = { results: [], totalMatches: 0 };
-    if (supabase) {
-      try {
-        searchResults = await knowledgeService.searchCodebase(supabase, {
-          query: userQuestion,
-          projectId,
-          repositoryId,
-          limit: 6,
-          similarityThreshold: 0.35,
-        });
-      } catch (err: any) {
-        console.warn(`[Agent] Codebase vector search notice: ${err?.message}`);
-      }
+    // 1. On-Demand Code Exploration: Search repository files for relevant keywords and symbols
+    let searchResults: { results: CodeSearchMatch[]; totalMatches: number } = {
+      results: [],
+      totalMatches: 0,
+    };
+
+    try {
+      searchResults = await codeExplorerService.searchCodebase({
+        repositoryId,
+        projectId,
+        query: userQuestion,
+        limit: 6,
+      });
+    } catch (err: any) {
+      console.warn(`[AgentRunner] Codebase search notice: ${err?.message}`);
     }
 
     for (const r of searchResults.results || []) {
       sourcesUsed.push({
-        filePath: r.metadata?.filePath,
-        similarity: r.similarity,
-        symbolName: r.metadata?.symbolName,
+        filePath: r.filePath,
+        similarity: 1.0,
+        symbolName: r.symbolName,
+        startLine: r.startLine,
+        endLine: r.endLine,
       });
     }
 
-    // 2. Build Chat Messages
+    // 2. Build Chat Messages & Execute Ollama
     const messages = this.buildChatMessages(
       userQuestion,
       chatHistory,
@@ -138,7 +150,8 @@ GUIDELINES:
       }
 
       const data = (await response.json()) as { message?: { content?: string } };
-      const answer = data.message?.content || "I was unable to generate a response from local Ollama.";
+      const answer =
+        data.message?.content || "I was unable to generate a response from local Ollama.";
 
       return {
         answer,
@@ -154,10 +167,10 @@ GUIDELINES:
    * Executes the AI Code Assistant agent with real-time SSE streaming using local Ollama.
    */
   public async runAgentStream(input: AgentRunStreamInput): Promise<AgentRunOutput> {
-    const { supabase, projectId, repositoryId, userQuestion, chatHistory, onEvent } = input;
+    const { projectId, repositoryId, userQuestion, chatHistory, onEvent } = input;
     const sourcesUsed: AgentRunOutput["sourcesUsed"] = [];
 
-    // 1. Notify client that codebase search has started
+    // 1. Notify frontend that codebase search / exploration has started
     await onEvent({
       type: "tool_call",
       data: {
@@ -166,27 +179,30 @@ GUIDELINES:
       },
     });
 
-    // 2. Search vector database for matching code chunks
-    let searchResults: { results: any[]; totalMatches: number } = { results: [], totalMatches: 0 };
-    if (supabase) {
-      try {
-        searchResults = await knowledgeService.searchCodebase(supabase, {
-          query: userQuestion,
-          projectId,
-          repositoryId,
-          limit: 6,
-          similarityThreshold: 0.35,
-        });
-      } catch (err: any) {
-        console.warn(`[Agent] Codebase vector search notice: ${err?.message}`);
-      }
+    // 2. On-Demand Code Exploration: Search repository files in MongoDB
+    let searchResults: { results: CodeSearchMatch[]; totalMatches: number } = {
+      results: [],
+      totalMatches: 0,
+    };
+
+    try {
+      searchResults = await codeExplorerService.searchCodebase({
+        repositoryId,
+        projectId,
+        query: userQuestion,
+        limit: 6,
+      });
+    } catch (err: any) {
+      console.warn(`[AgentRunner] Codebase search notice: ${err?.message}`);
     }
 
     for (const r of searchResults.results || []) {
       sourcesUsed.push({
-        filePath: r.metadata?.filePath,
-        similarity: r.similarity,
-        symbolName: r.metadata?.symbolName,
+        filePath: r.filePath,
+        similarity: 1.0,
+        symbolName: r.symbolName,
+        startLine: r.startLine,
+        endLine: r.endLine,
       });
     }
 
@@ -254,7 +270,7 @@ GUIDELINES:
               });
             }
           } catch {
-            // Ignore incomplete JSON chunks in streaming lines
+            // Ignore partial streaming chunks
           }
         }
       }

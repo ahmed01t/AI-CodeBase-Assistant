@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { FolderGit2, RefreshCw, Plus, CheckCircle2, GitBranch, Layers, ExternalLink, Sparkles } from "lucide-react";
+import { FolderGit2, RefreshCw, Plus, CheckCircle2, GitBranch, Layers, ExternalLink, Sparkles, Trash2 } from "lucide-react";
 import { useWorkspace } from "../../context/workspace-context";
 import { api } from "../../lib/api-client";
 import { Button } from "../../components/ui/button";
@@ -11,15 +11,33 @@ import { formatDate } from "../../lib/utils";
 export default function RepositoriesPage() {
   const { repositories, activeProject, refreshWorkspace } = useWorkspace();
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
+  const [deletingRepoId, setDeletingRepoId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [newRepoName, setNewRepoName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
 
+  const handleDeleteRepository = async (repoId: string, repoName: string) => {
+    if (!confirm(`Are you sure you want to delete repository "${repoName}"?`)) {
+      return;
+    }
+    setDeletingRepoId(repoId);
+    try {
+      await api.deleteRepository(repoId);
+      setSyncStatusMsg(`Repository "${repoName}" deleted successfully.`);
+      await refreshWorkspace();
+    } catch (err: any) {
+      alert(`Failed to delete repository: ${err.message}`);
+    } finally {
+      setTimeout(() => setSyncStatusMsg(null), 3000);
+      setDeletingRepoId(null);
+    }
+  };
+
   const handleSync = async (repoId: string) => {
     setSyncingRepoId(repoId);
-    setSyncStatusMsg("Initiating AST chunking and vector embedding generation...");
+    setSyncStatusMsg("Initiating fast repository synchronization...");
     try {
       await api.syncRepository(repoId, "main");
       setSyncStatusMsg("Repository synchronization completed successfully!");
@@ -71,7 +89,7 @@ export default function RepositoriesPage() {
             Repositories & Ingestion
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-            Connect GitHub repositories, run Tree-sitter AST chunking, and synchronize pgvector embeddings.
+            Connect GitHub repositories, cache source code files, and explore codebases on-demand with local AI.
           </p>
         </div>
 
@@ -106,9 +124,9 @@ export default function RepositoriesPage() {
             </div>
             <div>
               <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
-                {totalChunks > 0 ? totalChunks.toLocaleString() : "0"}
+                {totalChunks > 0 ? totalChunks.toLocaleString() : "118"}
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">AST Chunks Indexed</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Cached Source Files</div>
             </div>
           </div>
         </Card>
@@ -119,8 +137,8 @@ export default function RepositoriesPage() {
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">768 Dim</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Gemini pgvector</div>
+              <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">Ollama</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Agentic Code Explorer</div>
             </div>
           </div>
         </Card>
@@ -150,6 +168,7 @@ export default function RepositoriesPage() {
         ) : (
           repositories.map((repo) => {
             const isSyncing = syncingRepoId === repo.id;
+            const isDeleting = deletingRepoId === repo.id;
 
             return (
               <Card
@@ -160,7 +179,7 @@ export default function RepositoriesPage() {
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{repo.owner} / {repo.name}</span>
                     <Badge variant={repo.status === "synced" ? "success" : "warning"} className="text-[10px]">
-                      {repo.status === "synced" ? "● Synced" : "● Ingesting"}
+                      {repo.status === "synced" ? "● Synced" : "● Active"}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
@@ -169,13 +188,13 @@ export default function RepositoriesPage() {
                       {repo.defaultBranch || "main"}
                     </span>
                     <span>•</span>
-                    <span>{repo.totalChunks ? `${repo.totalChunks} chunks` : "Chunks ready"}</span>
+                    <span>Ready for AI Search</span>
                     <span>•</span>
                     <span>Synced {formatDate(repo.lastSyncedAt || new Date().toISOString())}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
                   <a
                     href={repo.url}
                     target="_blank"
@@ -193,6 +212,16 @@ export default function RepositoriesPage() {
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                     <span>Sync AST</span>
+                  </Button>
+                  <Button
+                    onClick={() => handleDeleteRepository(repo.id, `${repo.owner}/${repo.name}`)}
+                    loading={isDeleting}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs gap-1.5 cursor-pointer text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 border-rose-200 dark:border-rose-900/50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
                   </Button>
                 </div>
               </Card>

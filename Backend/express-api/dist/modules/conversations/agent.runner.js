@@ -1,6 +1,11 @@
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
-import { knowledgeService } from "../knowledge/knowledge.service.js";
+import { codeExplorerService } from "../code-explorer/code-explorer.service.js";
+/**
+ * On-Demand Agentic Codebase Assistant Runner
+ * Explores repository code dynamically on user request, reads relevant files,
+ * and streams accurate answers via local Ollama.
+ */
 export class AgentRunner {
     baseUrl;
     modelName;
@@ -9,19 +14,19 @@ export class AgentRunner {
         this.modelName = env.OLLAMA_CHAT_MODEL;
     }
     /**
-     * Builds conversation message list for Ollama /api/chat
+     * Constructs conversation messages for local Ollama /api/chat
      */
-    buildChatMessages(userQuestion, chatHistory, retrievedChunks) {
+    buildChatMessages(userQuestion, chatHistory, codeMatches) {
         const messages = [];
         // 1. System Prompt
-        const systemPrompt = `You are CodePilot AI, a Senior AI Codebase Assistant running on a local inference engine.
-Your mission is to assist developers in understanding, debugging, navigating, and improving their codebase.
+        const systemPrompt = `You are CodePilot AI, a Senior AI Codebase Assistant running on a high-speed local inference engine.
+Your mission is to help developers understand, navigate, debug, and improve their codebase.
 
 GUIDELINES:
-1. When relevant code snippets from the codebase are provided in the prompt, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
-2. If code snippets are not available or no exact match was found, explain the concept thoroughly based on standard TypeScript / Express / Node.js architectural patterns and where such files are conventionally placed.
+1. When relevant code snippets from the codebase are provided, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
+2. Explain architectural decisions, call hierarchies, and implementation details clearly.
 3. Provide complete, clean, syntax-highlighted code blocks with language specifiers (e.g., \`\`\`typescript ... \`\`\`).
-4. Be concise, precise, friendly, and well-structured using markdown headings and bullet points.`;
+4. Be structured, precise, and concise using markdown headings and bullet points.`;
         messages.push({ role: "system", content: systemPrompt });
         // 2. Chat history (last 6 turns)
         for (const msg of chatHistory.slice(-6)) {
@@ -30,13 +35,13 @@ GUIDELINES:
                 content: msg.content,
             });
         }
-        // 3. Current user prompt with retrieved codebase context
+        // 3. Current user prompt with retrieved live codebase context
         let promptWithContext = userQuestion;
-        if (retrievedChunks && retrievedChunks.length > 0) {
-            const codeContext = retrievedChunks
-                .map((c, idx) => `--- Code Snippet #${idx + 1} (${c.metadata?.filePath || "unknown"} : lines ${c.metadata?.startLine || 1}-${c.metadata?.endLine || "?"}) ---\n${c.content}`)
+        if (codeMatches && codeMatches.length > 0) {
+            const codeContext = codeMatches
+                .map((c, idx) => `--- Code Snippet #${idx + 1}: ${c.filePath} (lines ${c.startLine}-${c.endLine}${c.symbolName ? `, symbol: ${c.symbolName}` : ""}) ---\n${c.snippet}`)
                 .join("\n\n");
-            promptWithContext = `Relevant Code Snippets from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
+            promptWithContext = `Relevant Code from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
         }
         messages.push({ role: "user", content: promptWithContext });
         return messages;
@@ -45,32 +50,34 @@ GUIDELINES:
      * Executes the AI Code Assistant agent synchronously using local Ollama.
      */
     async runAgent(input) {
-        const { supabase, projectId, repositoryId, userQuestion, chatHistory } = input;
+        const { projectId, repositoryId, userQuestion, chatHistory } = input;
         const sourcesUsed = [];
-        // 1. Search vector database for matching code chunks
-        let searchResults = { results: [], totalMatches: 0 };
-        if (supabase) {
-            try {
-                searchResults = await knowledgeService.searchCodebase(supabase, {
-                    query: userQuestion,
-                    projectId,
-                    repositoryId,
-                    limit: 6,
-                    similarityThreshold: 0.35,
-                });
-            }
-            catch (err) {
-                console.warn(`[Agent] Codebase vector search notice: ${err?.message}`);
-            }
+        // 1. On-Demand Code Exploration: Search repository files for relevant keywords and symbols
+        let searchResults = {
+            results: [],
+            totalMatches: 0,
+        };
+        try {
+            searchResults = await codeExplorerService.searchCodebase({
+                repositoryId,
+                projectId,
+                query: userQuestion,
+                limit: 6,
+            });
+        }
+        catch (err) {
+            console.warn(`[AgentRunner] Codebase search notice: ${err?.message}`);
         }
         for (const r of searchResults.results || []) {
             sourcesUsed.push({
-                filePath: r.metadata?.filePath,
-                similarity: r.similarity,
-                symbolName: r.metadata?.symbolName,
+                filePath: r.filePath,
+                similarity: 1.0,
+                symbolName: r.symbolName,
+                startLine: r.startLine,
+                endLine: r.endLine,
             });
         }
-        // 2. Build Chat Messages
+        // 2. Build Chat Messages & Execute Ollama
         const messages = this.buildChatMessages(userQuestion, chatHistory, searchResults.results || []);
         try {
             const response = await fetch(`${this.baseUrl}/api/chat`, {
@@ -103,9 +110,9 @@ GUIDELINES:
      * Executes the AI Code Assistant agent with real-time SSE streaming using local Ollama.
      */
     async runAgentStream(input) {
-        const { supabase, projectId, repositoryId, userQuestion, chatHistory, onEvent } = input;
+        const { projectId, repositoryId, userQuestion, chatHistory, onEvent } = input;
         const sourcesUsed = [];
-        // 1. Notify client that codebase search has started
+        // 1. Notify frontend that codebase search / exploration has started
         await onEvent({
             type: "tool_call",
             data: {
@@ -113,27 +120,29 @@ GUIDELINES:
                 query: userQuestion,
             },
         });
-        // 2. Search vector database for matching code chunks
-        let searchResults = { results: [], totalMatches: 0 };
-        if (supabase) {
-            try {
-                searchResults = await knowledgeService.searchCodebase(supabase, {
-                    query: userQuestion,
-                    projectId,
-                    repositoryId,
-                    limit: 6,
-                    similarityThreshold: 0.35,
-                });
-            }
-            catch (err) {
-                console.warn(`[Agent] Codebase vector search notice: ${err?.message}`);
-            }
+        // 2. On-Demand Code Exploration: Search repository files in MongoDB
+        let searchResults = {
+            results: [],
+            totalMatches: 0,
+        };
+        try {
+            searchResults = await codeExplorerService.searchCodebase({
+                repositoryId,
+                projectId,
+                query: userQuestion,
+                limit: 6,
+            });
+        }
+        catch (err) {
+            console.warn(`[AgentRunner] Codebase search notice: ${err?.message}`);
         }
         for (const r of searchResults.results || []) {
             sourcesUsed.push({
-                filePath: r.metadata?.filePath,
-                similarity: r.similarity,
-                symbolName: r.metadata?.symbolName,
+                filePath: r.filePath,
+                similarity: 1.0,
+                symbolName: r.symbolName,
+                startLine: r.startLine,
+                endLine: r.endLine,
             });
         }
         // 3. Emit tool result with citations to frontend
@@ -187,7 +196,7 @@ GUIDELINES:
                         }
                     }
                     catch {
-                        // Ignore incomplete JSON chunks in streaming lines
+                        // Ignore partial streaming chunks
                     }
                 }
             }
