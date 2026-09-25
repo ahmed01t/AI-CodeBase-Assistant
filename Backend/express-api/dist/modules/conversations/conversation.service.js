@@ -52,8 +52,8 @@ export class ConversationService {
         });
         try {
             // 4. Fetch recent chat history for context
-            const chatHistory = await conversationRepository.listMessagesByConversationId(supabase, conversationId, 10);
-            // 5. Run the Autonomous AI Agent (Gemini + vector search tools)
+            const chatHistory = await conversationRepository.listMessagesByConversationId(supabase, conversationId, 100);
+            // 5. Run the Autonomous AI Agent (Ollama + live code search)
             const agentOutput = await agentRunner.runAgent({
                 supabase,
                 projectId: conversation.projectId,
@@ -78,7 +78,6 @@ export class ConversationService {
             };
         }
         catch (error) {
-            // Record failure in agent run
             await conversationRepository.completeAgentRun(supabase, runId, "failed", error.message);
             throw error;
         }
@@ -111,7 +110,7 @@ export class ConversationService {
         });
         try {
             // 5. Fetch recent chat history
-            const chatHistory = await conversationRepository.listMessagesByConversationId(supabase, conversationId, 10);
+            const chatHistory = await conversationRepository.listMessagesByConversationId(supabase, conversationId, 100);
             // 6. Run streaming agent execution
             const agentOutput = await agentRunner.runAgentStream({
                 supabase,
@@ -148,6 +147,12 @@ export class ConversationService {
             });
             throw error;
         }
+    }
+    /**
+     * Deletes a conversation thread and all its messages.
+     */
+    async deleteConversation(supabase, conversationId) {
+        await conversationRepository.deleteConversation(supabase, conversationId);
     }
 }
 export const conversationService = new ConversationService();

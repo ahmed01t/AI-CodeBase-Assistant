@@ -5,6 +5,7 @@ import {
   createConversation,
   listConversations,
   getConversation,
+  deleteConversation,
   sendMessage,
   sendMessageStream,
 } from "./conversation.controller.js";
@@ -38,6 +39,12 @@ router.get(
   getConversation
 );
 
+router.delete(
+  "/:id",
+  validateRequest({ params: conversationIdParamSchema }),
+  deleteConversation
+);
+
 router.post(
   "/:id/messages",
   validateRequest({
@@ -57,4 +64,3 @@ router.post(
 );
 
 export default router;
-

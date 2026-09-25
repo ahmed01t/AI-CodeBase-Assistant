@@ -255,3 +255,68 @@ WITH CHECK (
     )
 );
 
+-- 7. CONVERSATIONS & MESSAGES POLICIES
+DROP POLICY IF EXISTS "members_can_update_conversations" ON public.conversations;
+CREATE POLICY "members_can_update_conversations"
+ON public.conversations FOR UPDATE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.projects p
+        WHERE p.id = conversations.project_id
+          AND public.is_org_member(p.organization_id)
+    )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.projects p
+        WHERE p.id = conversations.project_id
+          AND public.is_org_member(p.organization_id)
+    )
+);
+
+DROP POLICY IF EXISTS "members_can_delete_conversations" ON public.conversations;
+CREATE POLICY "members_can_delete_conversations"
+ON public.conversations FOR DELETE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.projects p
+        WHERE p.id = conversations.project_id
+          AND public.is_org_member(p.organization_id)
+    )
+);
+
+DROP POLICY IF EXISTS "members_can_delete_messages" ON public.messages;
+CREATE POLICY "members_can_delete_messages"
+ON public.messages FOR DELETE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.conversations c
+        JOIN public.projects p ON p.id = c.project_id
+        WHERE c.id = messages.conversation_id
+          AND public.is_org_member(p.organization_id)
+    )
+);
+
+DROP POLICY IF EXISTS "members_can_delete_agent_runs" ON public.agent_runs;
+CREATE POLICY "members_can_delete_agent_runs"
+ON public.agent_runs FOR DELETE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.projects p
+        WHERE p.id = agent_runs.project_id
+          AND public.is_org_member(p.organization_id)
+    )
+);
+
+DROP POLICY IF EXISTS "members_can_delete_agent_steps" ON public.agent_steps;
+CREATE POLICY "members_can_delete_agent_steps"
+ON public.agent_steps FOR DELETE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.agent_runs ar
+        JOIN public.projects p ON p.id = ar.project_id
+        WHERE ar.id = agent_steps.agent_run_id
+          AND public.is_org_member(p.organization_id)
+    )
+);
+

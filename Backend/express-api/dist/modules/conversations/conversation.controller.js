@@ -60,6 +60,24 @@ export async function getConversation(req, res, next) {
     }
 }
 /**
+ * DELETE /api/v1/conversations/:id
+ * Deletes a conversation and its messages
+ */
+export async function deleteConversation(req, res, next) {
+    try {
+        const token = req.token;
+        const supabase = getAuthenticatedSupabaseClient(token);
+        const id = req.params.id;
+        await conversationService.deleteConversation(supabase, id);
+        return res
+            .status(200)
+            .json(new ApiResponse(200, { deleted: true }, "Conversation deleted successfully"));
+    }
+    catch (error) {
+        next(error);
+    }
+}
+/**
  * POST /api/v1/conversations/:id/messages
  * Sends a message and triggers the AI Code Assistant agent
  */

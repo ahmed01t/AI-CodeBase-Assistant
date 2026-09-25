@@ -16,11 +16,13 @@ import {
   Bot,
   LogOut,
   X,
+  Trash2,
 } from "lucide-react";
 import { useWorkspace } from "../../context/workspace-context";
 import { useAuth } from "../../context/auth-context";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import { api } from "../../lib/api-client";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -34,12 +36,38 @@ export function Sidebar() {
     conversations,
     activeConversationId,
     setActiveConversationId,
+    deleteConversation,
     sidebarOpen,
     setSidebarOpen,
+    refreshWorkspace,
   } = useWorkspace();
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
   const { user, signOut } = useAuth();
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+
+  const handleDeleteConversation = async (
+    e: React.MouseEvent,
+    conversationId: string,
+    title?: string | null
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the thread "${title || "Untitled"}"?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingChatId(conversationId);
+      await deleteConversation(conversationId);
+    } catch (err: any) {
+      alert(`Failed to delete conversation: ${err.message || "Unknown error"}`);
+    } finally {
+      setDeletingChatId(null);
+    }
+  };
 
   const navItems = [
     { label: "AI Code Assistant", href: "/", icon: MessageSquare },
@@ -80,7 +108,7 @@ export function Sidebar() {
               </div>
               <div>
                 <div className="text-[11px] font-bold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">
-                  CodePilot AI
+                  NexusCode AI
                 </div>
                 <button
                   onClick={() => setShowOrgDropdown(!showOrgDropdown)}
@@ -221,22 +249,32 @@ export function Sidebar() {
               </div>
             ) : (
               conversations.map((c) => (
-                <button
+                <div
                   key={c.id}
                   onClick={() => {
                     setActiveConversationId(c.id);
                     handleNavClick();
                   }}
                   className={cn(
-                    "w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2 truncate cursor-pointer",
+                    "group w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between cursor-pointer",
                     activeConversationId === c.id
                       ? "bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 font-medium"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 hover:text-slate-800 dark:hover:text-slate-200"
                   )}
                 >
-                  <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                  <span className="truncate">{c.title || "Untitled Conversation"}</span>
-                </button>
+                  <div className="flex items-center gap-2 truncate min-w-0 pr-2">
+                    <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                    <span className="truncate">{c.title || "Untitled Conversation"}</span>
+                  </div>
+                  <button
+                    onClick={(e) => handleDeleteConversation(e, c.id, c.title)}
+                    disabled={deletingChatId === c.id}
+                    title="Delete Chat Thread"
+                    className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-opacity rounded"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -273,4 +311,3 @@ export function Sidebar() {
     </>
   );
 }
-

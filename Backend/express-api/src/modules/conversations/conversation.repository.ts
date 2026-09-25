@@ -173,6 +173,38 @@ export class ConversationRepository {
       .eq("id", runId);
   }
 
+  /**
+   * Deletes a conversation by ID.
+   */
+  public async deleteConversation(
+    supabase: SupabaseClient,
+    id: string
+  ): Promise<void> {
+    // 1. Delete associated messages
+    const { error: msgError } = await supabase
+      .from("messages")
+      .delete()
+      .eq("conversation_id", id);
+    if (msgError) {
+      console.warn(`[ConversationRepository] Warning deleting messages:`, msgError.message);
+    }
+
+    // 2. Clear or delete associated agent_runs for this conversation
+    const { error: runError } = await supabase
+      .from("agent_runs")
+      .delete()
+      .eq("conversation_id", id);
+    if (runError) {
+      console.warn(`[ConversationRepository] Warning deleting agent_runs:`, runError.message);
+    }
+
+    // 3. Delete conversation record
+    const { error } = await supabase.from("conversations").delete().eq("id", id);
+    if (error) {
+      throw new ApiError(500, `Failed to delete conversation: ${error.message}`);
+    }
+  }
+
   private mapConversation(row: any): Conversation {
     return {
       id: row.id,

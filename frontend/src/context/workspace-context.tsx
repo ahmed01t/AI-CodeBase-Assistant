@@ -18,6 +18,7 @@ interface WorkspaceContextType {
   conversations: Conversation[];
   activeConversationId: string | null;
   setActiveConversationId: (id: string | null) => void;
+  deleteConversation: (conversationId: string) => Promise<void>;
   theme: "dark" | "light";
   toggleTheme: () => void;
   sidebarOpen: boolean;
@@ -67,6 +68,33 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setSidebarOpen((prev) => !prev);
   };
 
+  const deleteConversation = async (conversationId: string) => {
+    // 1. Optimistically update local conversation state
+    setConversations((prev) => {
+      const filtered = prev.filter((c) => c.id !== conversationId);
+      return filtered;
+    });
+
+    // 2. If the active conversation was deleted, switch to next available or null
+    setActiveConversationId((prevActive) => {
+      if (prevActive === conversationId) {
+        const remaining = conversations.filter((c) => c.id !== conversationId);
+        return remaining.length > 0 ? remaining[0].id : null;
+      }
+      return prevActive;
+    });
+
+    try {
+      // 3. Delete from backend database
+      await api.deleteConversation(conversationId);
+    } catch (err: any) {
+      console.error("[Workspace] Error deleting conversation:", err);
+      // Re-sync to restore server truth on failure
+      await refreshWorkspace();
+      throw err;
+    }
+  };
+
   const refreshWorkspace = async () => {
     if (!user) return;
     setLoading(true);
@@ -88,7 +116,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         console.warn("[Workspace] Organization sync warning:", e);
       }
       setOrganizations(orgs);
-      const currentOrg = orgs[0] || null;
+      const currentOrg = (activeOrg && orgs.find((o) => o.id === activeOrg.id)) || orgs[0] || null;
       setActiveOrg(currentOrg);
 
       // 2. Fetch Projects
@@ -112,7 +140,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setProjects(projs);
-      const currentProj = projs[0] || null;
+      const currentProj = (activeProject && projs.find((p) => p.id === activeProject.id)) || projs[0] || null;
       setActiveProject(currentProj);
 
       // 3. Fetch Repositories
@@ -125,7 +153,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setRepositories(repos);
-      setActiveRepo(repos[0] || null);
+      setActiveRepo((prevRepo) => {
+        if (prevRepo && repos.some((r) => r.id === prevRepo.id)) return prevRepo;
+        return repos[0] || null;
+      });
 
       // 4. Fetch Conversations
       let convs: Conversation[] = [];
@@ -137,9 +168,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setConversations(convs);
-      if (convs.length > 0 && !activeConversationId) {
-        setActiveConversationId(convs[0].id);
-      }
+      setActiveConversationId((prevActive) => {
+        if (!prevActive && convs.length > 0) return convs[0].id;
+        if (prevActive && !convs.some((c) => c.id === prevActive)) {
+          return convs.length > 0 ? convs[0].id : null;
+        }
+        return prevActive;
+      });
     } catch (err) {
       console.error("[Workspace] Failed to refresh workspace:", err);
     } finally {
@@ -168,6 +203,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         conversations,
         activeConversationId,
         setActiveConversationId,
+        deleteConversation,
         theme,
         toggleTheme,
         sidebarOpen,
