@@ -28,6 +28,49 @@ export interface RawFileDocument {
   mime_type: string;
   created_at: Date;
   updated_at: Date;
+  /** Lightweight, revision-aware static evidence. This intentionally contains no embeddings. */
+  analysis?: StaticFileAnalysis;
+}
+
+export interface StaticEvidenceLocation {
+  startLine: number;
+  endLine: number;
+}
+
+export interface StaticSymbolEvidence extends StaticEvidenceLocation {
+  name: string;
+  kind: "class" | "function" | "method" | "interface" | "type" | "enum";
+  qualifiedName?: string;
+}
+
+export interface StaticImportEvidence extends StaticEvidenceLocation {
+  source: string;
+  importedSymbols: string[];
+}
+
+export interface StaticRouteEvidence extends StaticEvidenceLocation {
+  method: string;
+  path: string;
+}
+
+export interface StaticDatabaseEvidence extends StaticEvidenceLocation {
+  reference: string;
+}
+
+/**
+ * Small, searchable code facts extracted during ingestion. The raw source remains
+ * in MongoDB; this metadata lets impact analysis work without vector generation.
+ */
+export interface StaticFileAnalysis {
+  indexedAt: string;
+  parserVersion: number;
+  language: string;
+  parseSucceeded: boolean;
+  symbols: StaticSymbolEvidence[];
+  imports: StaticImportEvidence[];
+  routes: StaticRouteEvidence[];
+  databaseReferences: StaticDatabaseEvidence[];
+  isTestFile: boolean;
 }
 
 /**
@@ -51,4 +94,3 @@ export interface IngestionTaskContext {
   userToken: string;
   customGithubToken?: string;
 }
-

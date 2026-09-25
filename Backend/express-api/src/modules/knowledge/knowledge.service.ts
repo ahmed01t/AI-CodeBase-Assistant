@@ -1,7 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { embeddingService } from "../embeddings/embedding.service.js";
 import { ApiError } from "../../utils/ApiError.js";
-import { knowledgeRepository } from "./knowledge.repository.js";
+import { codeExplorerService } from "../code-explorer/code-explorer.service.js";
 import {
   SearchKnowledgeQuery,
   SearchKnowledgeResponse,
@@ -9,20 +8,15 @@ import {
 
 export class KnowledgeService {
   /**
-   * Semantically searches the codebase by embedding the natural language query
-   * and retrieving nearest code chunks via pgvector.
+   * Performs low-load evidence search over the synchronized source cache.
+   * Vector search is deliberately not part of the default path: repositories
+   * can be useful immediately without generating a large embedding corpus.
    */
   public async searchCodebase(
     supabase: SupabaseClient,
     searchQuery: SearchKnowledgeQuery
   ): Promise<SearchKnowledgeResponse> {
-    const {
-      query,
-      projectId,
-      repositoryId,
-      limit = 5,
-      similarityThreshold = 0.5,
-    } = searchQuery;
+    const { query, projectId, repositoryId, limit = 5 } = searchQuery;
 
     if (!query || query.trim() === "") {
       throw new ApiError(400, "Search query text is required");
@@ -32,19 +26,28 @@ export class KnowledgeService {
       throw new ApiError(400, "projectId is required for knowledge search");
     }
 
-    // 1. Convert user's question to a vector via Gemini
-    const queryEmbedding = await embeddingService.embedQuery(query);
+    const matches = await codeExplorerService.searchCodebase({
+      projectId,
+      repositoryId,
+      query,
+      limit,
+    });
 
-    // 2. Perform vector search in PostgreSQL
-    const matchedChunks = await knowledgeRepository.searchSimilarChunks( supabase,
-      {
-        queryVector: queryEmbedding.values,
-        projectId,
-        repositoryId,
-        matchCount: limit,
-        similarityThreshold,
-      }
-    );
+    const matchedChunks = matches.results.map((match) => ({
+      chunkId: `${match.filePath}:${match.startLine}`,
+      documentId: match.filePath,
+      content: match.snippet,
+      // Score is lexical evidence strength, not a vector similarity percentage.
+      similarity: Math.min(1, match.score / 10),
+      metadata: {
+        filePath: match.filePath,
+        filename: match.filename,
+        symbolName: match.symbolName,
+        startLine: match.startLine,
+        endLine: match.endLine,
+        retrieval: "lexical_evidence",
+      },
+    }));
 
     return {
       query: query.trim(),

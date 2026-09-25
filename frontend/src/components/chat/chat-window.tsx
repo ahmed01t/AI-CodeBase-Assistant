@@ -38,7 +38,7 @@ export function ChatWindow() {
             id: "welcome-1",
             conversationId: "welcome",
             role: "assistant",
-            content: `Hello! I am your **AI Codebase Assistant**.\n\nI have parsed the repository using **Tree-sitter AST**, embedded code chunks into **pgvector**, and can answer questions with exact code citations.\n\nAsk me anything about the codebase architecture, API routes, or implementation details!`,
+            content: `Hello! I am your **AI Codebase Assistant**.\n\nI search synchronized repository evidence and provide file-and-line citations. Use **Change Impact** to investigate what a code change may affect without creating embeddings.\n\nAsk me anything about the codebase architecture, API routes, or implementation details!`,
             createdAt: new Date().toISOString(),
           },
         ]);

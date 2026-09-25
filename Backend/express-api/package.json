@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test:static-index": "tsx tests/unit/static-indexer.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",

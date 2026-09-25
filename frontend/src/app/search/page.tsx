@@ -50,10 +50,10 @@ export default function SemanticSearchPage() {
       {/* Header */}
       <div className="mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
         <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-          Semantic RAG Code Search
+          Evidence Code Search
         </h1>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-          Perform cosine similarity searches directly against pgvector embeddings and inspect matched AST code chunks.
+          Search synchronized source evidence by file path, symbols, and code terms. This does not generate embeddings.
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export default function SemanticSearchPage() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter semantic query (e.g. 'JWT token verification', 'Tree-sitter WASM parser')..."
+                placeholder="Search a symbol, route, or code term (e.g. 'authenticate', 'JWT', '/login')..."
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
               />
             </div>
@@ -84,7 +84,7 @@ export default function SemanticSearchPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-600 dark:text-slate-400 pt-1 gap-2">
             <div className="flex items-center gap-2">
               <Sliders className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Similarity Threshold:</span>
+              <span>Result threshold:</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-300">
                 {Math.round(similarityThreshold * 100)}%
               </span>
@@ -106,13 +106,13 @@ export default function SemanticSearchPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            {hasSearched ? `Matched Code Chunks (${results.length})` : "Ready to Search"}
+            {hasSearched ? `Matched Evidence (${results.length})` : "Ready to Search"}
           </h2>
         </div>
 
         {results.length === 0 && hasSearched && (
           <div className="text-center py-12 text-slate-400 dark:text-slate-500 text-xs">
-            No code chunks found exceeding the similarity threshold. Try lowering the threshold or refining your search terms.
+            No matching source evidence found. Try a symbol, route, filename, or more specific code term.
           </div>
         )}
 
@@ -133,7 +133,7 @@ export default function SemanticSearchPage() {
 
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <Badge variant="success">
-                  {Math.round(res.similarity * 100)}% Similarity
+                  Evidence score {Math.round(res.similarity * 100)}%
                 </Badge>
                 {res.metadata?.startLine && (
                   <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">

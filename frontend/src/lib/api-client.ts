@@ -142,6 +142,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // Evidence-backed deterministic change impact analysis (no embeddings required)
+  analyzeImpact: (repositoryId: string, target: string) =>
+    apiRequest("/impact-analysis", {
+      method: "POST",
+      body: JSON.stringify({ repositoryId, target }),
+    }),
+
   // Conversations & Chat
   listConversations: (projectId?: string) =>
     apiRequest(projectId ? `/conversations?projectId=${projectId}` : "/conversations"),

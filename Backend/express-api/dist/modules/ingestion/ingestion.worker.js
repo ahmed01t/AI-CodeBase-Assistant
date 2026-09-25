@@ -2,6 +2,7 @@ import path from "path";
 import { githubClient } from "../github/github.client.js";
 import { ingestionRepository } from "./ingestion.repository.js";
 import { defaultIngestionFilter } from "./ingestion.filter.js";
+import { staticIndexerService } from "../code-intelligence/static-indexer.service.js";
 /**
  * High-Speed Repository Ingestion Worker
  * Fetches repository file trees, filters out secrets & lockfiles, and persists
@@ -57,6 +58,9 @@ export class IngestionWorker {
                     }
                     const filename = path.posix.basename(fileItem.path);
                     const ext = path.posix.extname(filename).replace(/^\./, "");
+                    // Static indexing is deliberately cheap: it extracts evidence but does
+                    // not generate vectors or call an AI service during repository sync.
+                    const analysis = await staticIndexerService.analyzeFile(decodedContent, fileItem.path);
                     // A. Store raw file content in MongoDB (cached for On-Demand Code Explorer)
                     const rawDoc = {
                         repository_id: repositoryId,
@@ -70,6 +74,7 @@ export class IngestionWorker {
                         mime_type: "text/plain",
                         created_at: new Date(),
                         updated_at: new Date(),
+                        analysis,
                     };
                     await this.repository.storeRawFile(rawDoc);
                     // B. Record file metadata in PostgreSQL knowledge_documents

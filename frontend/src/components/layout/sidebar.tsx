@@ -7,6 +7,7 @@ import {
   MessageSquare,
   FolderGit2,
   Search,
+  GitPullRequestArrow,
   Building2,
   Webhook,
   Plus,
@@ -44,6 +45,7 @@ export function Sidebar() {
     { label: "AI Code Assistant", href: "/", icon: MessageSquare },
     { label: "Repositories & Sync", href: "/repositories", icon: FolderGit2 },
     { label: "Semantic Search", href: "/search", icon: Search },
+    { label: "Change Impact", href: "/impact-analysis", icon: GitPullRequestArrow },
     { label: "Organizations & Projects", href: "/organizations", icon: Building2 },
     { label: "GitHub Webhooks", href: "/webhooks", icon: Webhook },
   ];
