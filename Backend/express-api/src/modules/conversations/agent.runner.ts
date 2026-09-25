@@ -52,14 +52,10 @@ export class AgentRunner {
     const messages: Array<{ role: string; content: string }> = [];
 
     // 1. System Prompt
-    const systemPrompt = `You are CodePilot AI, a Senior AI Codebase Assistant running on a high-speed local inference engine.
-Your mission is to help developers understand, navigate, debug, and improve their codebase.
-
-GUIDELINES:
-1. When relevant code snippets from the codebase are provided, reference them directly, citing exact file paths (e.g., 'src/middleware/auth.middleware.ts') and line numbers.
-2. Explain architectural decisions, call hierarchies, and implementation details clearly.
-3. Provide complete, clean, syntax-highlighted code blocks with language specifiers (e.g., \`\`\`typescript ... \`\`\`).
-4. Be structured, precise, and concise using markdown headings and bullet points.`;
+    const systemPrompt = `You are an expert Senior Software Engineer analyzing a codebase.
+The user provides actual code snippets extracted directly from the repository.
+Your job is to carefully examine the provided code snippets and answer the user's question with 100% precision.
+Always cite the exact files and lines provided.`;
 
     messages.push({ role: "system", content: systemPrompt });
 
@@ -72,19 +68,19 @@ GUIDELINES:
     }
 
     // 3. Current user prompt with retrieved live codebase context
-    let promptWithContext = userQuestion;
+    let promptWithContext = "";
 
     if (codeMatches && codeMatches.length > 0) {
       const codeContext = codeMatches
         .map(
           (c, idx) =>
-            `--- Code Snippet #${idx + 1}: ${c.filePath} (lines ${c.startLine}-${c.endLine}${
-              c.symbolName ? `, symbol: ${c.symbolName}` : ""
-            }) ---\n${c.snippet}`
+            `File: ${c.filePath} (lines ${c.startLine}-${c.endLine}):\n${c.snippet}`
         )
-        .join("\n\n");
+        .join("\n\n---\n\n");
 
-      promptWithContext = `Relevant Code from Codebase:\n${codeContext}\n\nUser Question:\n${userQuestion}`;
+      promptWithContext = `=== CODE SNIPPETS FROM REPOSITORY ===\n${codeContext}\n=====================================\n\nQUESTION: ${userQuestion}\n\nPlease analyze the code snippets above to answer the question thoroughly and accurately:`;
+    } else {
+      promptWithContext = `(Note: No matching code was found in the repository for this query)\n\nQUESTION: ${userQuestion}`;
     }
 
     messages.push({ role: "user", content: promptWithContext });
